@@ -92,10 +92,11 @@ WSGI_APPLICATION = 'storefront.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
+        'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'storefront',
         'HOST': 'localhost',
-        'USER': 'root',
+        'PORT': '5433',
+        'USER': 'postgres',
         'PASSWORD': 'testpass'
     }
 }
