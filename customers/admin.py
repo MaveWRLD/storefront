@@ -12,7 +12,7 @@ class CustomerAdmin(admin.ModelAdmin):
     list_per_page = 10
     list_select_related = ['user']
     ordering = ['user__first_name', 'user__last_name']
-    search_fields = ['first_name__istartswith', 'last_name__istartswith']
+    search_fields = ['user__first_name__istartswith', 'user__last_name__istartswith']
 
     @admin.display(ordering='orders_count')
     def orders(self, customer):
