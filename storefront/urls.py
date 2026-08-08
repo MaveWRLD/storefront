@@ -37,7 +37,6 @@ def store_api_root(request, format=None):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('playground/', include('playground.urls')),
     path('store/', store_api_root, name='api-root'),
     path('store/', include('catalog.urls')),
     path('store/', include('cart.urls')),
