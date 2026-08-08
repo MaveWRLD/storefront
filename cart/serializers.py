@@ -38,6 +38,22 @@ class AddCartItemSerializer(serializers.ModelSerializer):
                 'No product with the given ID was found.')
         return value
 
+    def validate(self, data):
+        # Adapted from Saleor's check_stock_and_preorder_quantity: the requested
+        # quantity must fit within stock once what's already sitting in this
+        # cart for the same product is accounted for. No Warehouse/Reservation
+        # domain here (not built yet) — Product.inventory is the whole stock signal.
+        product = Product.objects.get(pk=data['product_id'])
+        cart_id = self.context['cart_id']
+        already_in_cart = CartItem.objects.filter(
+            cart_id=cart_id, product_id=product.id
+        ).values_list('quantity', flat=True).first() or 0
+
+        if product.inventory <= 0 or already_in_cart + data['quantity'] > product.inventory:
+            raise serializers.ValidationError(
+                'This product does not have enough stock available.')
+        return data
+
     def save(self, **kwargs):
         cart_id = self.context['cart_id']
         product_id = self.validated_data['product_id']
