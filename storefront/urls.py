@@ -15,14 +15,30 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.reverse import reverse
 import debug_toolbar
 
 admin.site.site_header = 'Storefront Admin'
 admin.site.index_title = 'Admin'
 
+
+@api_view(['GET'])
+def store_api_root(request, format=None):
+    return Response({
+        'products': reverse('products-list', request=request, format=format),
+        'collections': reverse('collection-list', request=request, format=format),
+        'carts': reverse('cart-list', request=request, format=format),
+        'customers': reverse('customer-list', request=request, format=format),
+        'orders': reverse('orders-list', request=request, format=format),
+    })
+
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('playground/', include('playground.urls')),
+    path('store/', store_api_root, name='api-root'),
     path('store/', include('catalog.urls')),
     path('store/', include('cart.urls')),
     path('store/', include('customers.urls')),
