@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'playground',
     'debug_toolbar',
     'catalog',
+    'customers',
     'store',
     'tags',
     'likes',
