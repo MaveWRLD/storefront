@@ -1,3 +1,5 @@
+from django.conf import settings
+from djmoney.money import Money
 from rest_framework import serializers
 from catalog.models import Product
 from catalog.serializers import SimpleProductSerializer
@@ -9,7 +11,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     total_price = serializers.SerializerMethodField()
 
     def get_total_price(self, cart_item: CartItem):
-        return cart_item.quantity * cart_item.product.unit_price
+        return (cart_item.quantity * cart_item.product.unit_price).amount
 
     class Meta:
         model = CartItem
@@ -22,7 +24,11 @@ class CartSerializer(serializers.ModelSerializer):
     total_price = serializers.SerializerMethodField()
 
     def get_total_price(self, cart):
-        return sum([item.quantity * item.product.unit_price for item in cart.items.all()])
+        total = sum(
+            (item.quantity * item.product.unit_price for item in cart.items.all()),
+            start=Money(0, settings.DEFAULT_CURRENCY)
+        )
+        return total.amount
 
     class Meta:
         model = Cart
