@@ -1,5 +1,7 @@
+from django.conf import settings
 from django.db import models
 from djmoney.models.fields import MoneyField
+from djmoney.money import Money
 
 
 class Order(models.Model):
@@ -43,6 +45,12 @@ class Order(models.Model):
         if self.customer_id:
             return self.customer.user.email
         return self.guest_email
+
+    def get_total(self):
+        return sum(
+            (item.quantity * item.unit_price for item in self.items.all()),
+            start=Money(0, settings.DEFAULT_CURRENCY)
+        )
 
     class Meta:
         permissions = [
