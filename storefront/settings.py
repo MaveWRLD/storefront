@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 
@@ -42,10 +43,12 @@ INSTALLED_APPS = [
     'rest_framework',
     'djoser',
     'debug_toolbar',
+    'djmoney',
     'catalog',
     'customers',
     'cart',
     'orders',
+    'payment',
     'tags',
     'likes',
     'core',
@@ -167,3 +170,13 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('JWT',),
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1)
 }
+
+# django-money
+DEFAULT_CURRENCY = 'USD'
+CURRENCIES = ('USD',)
+
+# Payment (US-10): Paystack is the only gateway (Business Rule: 'All payments
+# exclusively via Paystack'). Set a real key via env var in every real
+# environment; blank locally just means initialize/verify calls will fail
+# until one is configured.
+PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')

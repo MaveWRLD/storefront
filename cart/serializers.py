@@ -1,3 +1,5 @@
+from django.conf import settings
+from djmoney.money import Money
 from rest_framework import serializers
 from catalog.models import Product
 from catalog.serializers import SimpleProductSerializer
@@ -9,7 +11,7 @@ class CartItemSerializer(serializers.ModelSerializer):
     total_price = serializers.SerializerMethodField()
 
     def get_total_price(self, cart_item: CartItem):
-        return cart_item.quantity * cart_item.product.unit_price
+        return (cart_item.quantity * cart_item.product.unit_price).amount
 
     class Meta:
         model = CartItem
@@ -22,7 +24,11 @@ class CartSerializer(serializers.ModelSerializer):
     total_price = serializers.SerializerMethodField()
 
     def get_total_price(self, cart):
-        return sum([item.quantity * item.product.unit_price for item in cart.items.all()])
+        total = sum(
+            (item.quantity * item.product.unit_price for item in cart.items.all()),
+            start=Money(0, settings.DEFAULT_CURRENCY)
+        )
+        return total.amount
 
     class Meta:
         model = Cart
@@ -37,6 +43,22 @@ class AddCartItemSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'No product with the given ID was found.')
         return value
+
+    def validate(self, data):
+        # Adapted from Saleor's check_stock_and_preorder_quantity: the requested
+        # quantity must fit within stock once what's already sitting in this
+        # cart for the same product is accounted for. No Warehouse/Reservation
+        # domain here (not built yet) — Product.inventory is the whole stock signal.
+        product = Product.objects.get(pk=data['product_id'])
+        cart_id = self.context['cart_id']
+        already_in_cart = CartItem.objects.filter(
+            cart_id=cart_id, product_id=product.id
+        ).values_list('quantity', flat=True).first() or 0
+
+        if product.inventory <= 0 or already_in_cart + data['quantity'] > product.inventory:
+            raise serializers.ValidationError(
+                'This product does not have enough stock available.')
+        return data
 
     def save(self, **kwargs):
         cart_id = self.context['cart_id']

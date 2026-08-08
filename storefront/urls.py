@@ -42,6 +42,7 @@ urlpatterns = [
     path('store/', include('cart.urls')),
     path('store/', include('customers.urls')),
     path('store/', include('orders.urls')),
+    path('store/', include('payment.urls')),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
     path('__debug__/', include(debug_toolbar.urls)),

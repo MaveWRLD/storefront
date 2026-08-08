@@ -12,6 +12,7 @@ django-filter = "*"
 djoser = "*"
 djangorestframework-simplejwt = "*"
 psycopg2-binary = "*"
+django-money = "*"
 
 [dev-packages]
 autopep8 = "*"
