@@ -30,4 +30,4 @@ class TestCreateCollection:
         response = client.post('/store/collections/', {'title': 'a'})
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data['id '] > 0
+        assert response.data['id'] > 0
