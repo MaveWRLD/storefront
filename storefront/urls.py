@@ -23,7 +23,10 @@ admin.site.index_title = 'Admin'
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('playground/', include('playground.urls')),
-    path('store/', include('store.urls')),
+    path('store/', include('catalog.urls')),
+    path('store/', include('cart.urls')),
+    path('store/', include('customers.urls')),
+    path('store/', include('orders.urls')),
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
     path('__debug__/', include(debug_toolbar.urls)),
