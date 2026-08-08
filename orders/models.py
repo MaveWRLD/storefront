@@ -12,9 +12,24 @@ class Order(models.Model):
         (PAYMENT_STATUS_FAILED, 'Failed')
     ]
 
+    FULFILLMENT_PICKUP = 'PICKUP'
+    FULFILLMENT_DELIVERY = 'DELIVERY'
+    FULFILLMENT_METHOD_CHOICES = [
+        (FULFILLMENT_PICKUP, 'Pickup'),
+        (FULFILLMENT_DELIVERY, 'Delivery'),
+    ]
+
     placed_at = models.DateTimeField(auto_now_add=True)
     payment_status = models.CharField(
         max_length=1, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_STATUS_PENDING)
+    # Saleor distinguishes delivery vs. click-and-collect via delivery_method
+    # being a ShippingMethod or a Warehouse. Neither the Shipping-rate nor
+    # Warehouse domain exists here yet, so this is scaled down to a plain,
+    # required, mutually-exclusive tag — no cost/zone/warehouse config behind
+    # it. Required (no default): an order can't exist without one, which is
+    # what makes "payment can't proceed until it's chosen" true today.
+    fulfillment_method = models.CharField(
+        max_length=8, choices=FULFILLMENT_METHOD_CHOICES)
     # Adapted from Saleor's Order.user (nullable) + user_email: a registered
     # customer's order sets `customer`; a guest order leaves it null and
     # carries its own contact details instead.

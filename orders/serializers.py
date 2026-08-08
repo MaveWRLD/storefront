@@ -21,7 +21,7 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = ['id', 'customer', 'guest_name', 'guest_email',
-                  'placed_at', 'payment_status', 'items']
+                  'fulfillment_method', 'placed_at', 'payment_status', 'items']
 
 
 class UpdateOrderSerializer(serializers.ModelSerializer):
@@ -39,6 +39,8 @@ class CreateOrderSerializer(serializers.Serializer):
     an anonymous request must supply guest contact details instead.
     """
     cart_id = serializers.UUIDField()
+    fulfillment_method = serializers.ChoiceField(
+        choices=Order.FULFILLMENT_METHOD_CHOICES)
     guest_name = serializers.CharField(required=False, allow_blank=True)
     guest_email = serializers.EmailField(required=False)
     guest_phone = serializers.CharField(
@@ -65,11 +67,15 @@ class CreateOrderSerializer(serializers.Serializer):
             cart_id = self.validated_data['cart_id']
             user = self.context.get('user')
 
+            fulfillment_method = self.validated_data['fulfillment_method']
+
             if user is not None and user.is_authenticated:
                 customer = Customer.objects.get(user_id=user.id)
-                order = Order.objects.create(customer=customer)
+                order = Order.objects.create(
+                    customer=customer, fulfillment_method=fulfillment_method)
             else:
                 order = Order.objects.create(
+                    fulfillment_method=fulfillment_method,
                     guest_name=self.validated_data.get('guest_name', ''),
                     guest_email=self.validated_data.get('guest_email', ''),
                     guest_phone=self.validated_data.get('guest_phone', ''),
