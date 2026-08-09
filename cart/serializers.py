@@ -1,21 +1,22 @@
 from django.conf import settings
+from django.utils import timezone
 from djmoney.money import Money
 from rest_framework import serializers
-from catalog.models import Product
-from catalog.serializers import SimpleProductSerializer
+from catalog.models import Variant
+from catalog.serializers import SimpleVariantSerializer
 from .models import Cart, CartItem
 
 
 class CartItemSerializer(serializers.ModelSerializer):
-    product = SimpleProductSerializer()
+    variant = SimpleVariantSerializer()
     total_price = serializers.SerializerMethodField()
 
     def get_total_price(self, cart_item: CartItem):
-        return (cart_item.quantity * cart_item.product.unit_price).amount
+        return (cart_item.quantity * cart_item.variant.unit_price).amount
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'quantity', 'total_price']
+        fields = ['id', 'variant', 'quantity', 'total_price']
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -25,7 +26,7 @@ class CartSerializer(serializers.ModelSerializer):
 
     def get_total_price(self, cart):
         total = sum(
-            (item.quantity * item.product.unit_price for item in cart.items.all()),
+            (item.quantity * item.variant.unit_price for item in cart.items.all()),
             start=Money(0, settings.DEFAULT_CURRENCY)
         )
         return total.amount
@@ -36,38 +37,49 @@ class CartSerializer(serializers.ModelSerializer):
 
 
 class AddCartItemSerializer(serializers.ModelSerializer):
-    product_id = serializers.IntegerField()
+    variant_id = serializers.IntegerField()
 
-    def validate_product_id(self, value):
-        if not Product.objects.filter(pk=value).exists():
+    def validate_variant_id(self, value):
+        if not Variant.objects.filter(pk=value).exists():
             raise serializers.ValidationError(
-                'No product with the given ID was found.')
+                'No variant with the given ID was found.')
         return value
 
     def validate(self, data):
         # Adapted from Saleor's check_stock_and_preorder_quantity: the requested
         # quantity must fit within stock once what's already sitting in this
-        # cart for the same product is accounted for. No Warehouse/Reservation
-        # domain here (not built yet) — Product.inventory is the whole stock signal.
-        product = Product.objects.get(pk=data['product_id'])
+        # cart for the same variant is accounted for. No Warehouse/Reservation
+        # domain here (not built yet) — Variant.inventory is the whole stock signal.
+        variant = Variant.objects.select_related('product').get(
+            pk=data['variant_id'])
+
+        # Business Rule (Catalog): 'Availability controlled via ProductStatus,
+        # not a purchaseable flag' (US-22) — a DRAFT/ARCHIVED product can't be
+        # added to cart regardless of stock.
+        if not variant.product.is_available:
+            raise serializers.ValidationError(
+                'This product is not available for purchase.')
+
         cart_id = self.context['cart_id']
         already_in_cart = CartItem.objects.filter(
-            cart_id=cart_id, product_id=product.id
+            cart_id=cart_id, variant_id=variant.id
         ).values_list('quantity', flat=True).first() or 0
 
-        if product.inventory <= 0 or already_in_cart + data['quantity'] > product.inventory:
+        if variant.track_inventory and (
+                variant.inventory <= 0
+                or already_in_cart + data['quantity'] > variant.inventory):
             raise serializers.ValidationError(
                 'This product does not have enough stock available.')
         return data
 
     def save(self, **kwargs):
         cart_id = self.context['cart_id']
-        product_id = self.validated_data['product_id']
+        variant_id = self.validated_data['variant_id']
         quantity = self.validated_data['quantity']
 
         try:
             cart_item = CartItem.objects.get(
-                cart_id=cart_id, product_id=product_id)
+                cart_id=cart_id, variant_id=variant_id)
             cart_item.quantity += quantity
             cart_item.save()
             self.instance = cart_item
@@ -75,11 +87,15 @@ class AddCartItemSerializer(serializers.ModelSerializer):
             self.instance = CartItem.objects.create(
                 cart_id=cart_id, **self.validated_data)
 
+        # Business Rule (Checkout): 'Abandoned checkout preserves the cart' —
+        # touch the cart so its TTL clock (last_activity) resets on activity.
+        Cart.objects.filter(pk=cart_id).update(last_activity=timezone.now())
+
         return self.instance
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product_id', 'quantity']
+        fields = ['id', 'variant_id', 'quantity']
 
 
 class UpdateCartItemSerializer(serializers.ModelSerializer):
