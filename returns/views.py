@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.response import Response
@@ -11,6 +12,14 @@ from .serializers import (
 )
 
 
+@extend_schema_view(
+    create=extend_schema(
+        summary='Request a return',
+        description='Request a return for an order item. Open to guests (order number + contact match).'),
+    retrieve=extend_schema(
+        summary='Track a return',
+        description='Retrieve a return by id. Ownership is checked in the view; guests must match order number + contact.'),
+)
 class ReturnViewSet(CreateModelMixin, RetrieveModelMixin, GenericViewSet):
     """store-front/: create and retrieve (ownership-checked; guest allowed
     via order number + contact match)."""
@@ -39,6 +48,14 @@ class ReturnViewSet(CreateModelMixin, RetrieveModelMixin, GenericViewSet):
         return Response(ReturnSerializer(return_request).data)
 
 
+@extend_schema_view(
+    list=extend_schema(
+        summary='List return requests',
+        description='List all pending and reviewed return requests. Staff-only.'),
+    partial_update=extend_schema(
+        summary='Review a return',
+        description='Approve or reject a return request; approving triggers a refund. Staff-only.'),
+)
 class ReturnAdminViewSet(ListModelMixin, GenericViewSet):
     """store-admin/: list, review (approve/reject) via partial_update
     (US-26/US-17: 'Only Admin can approve/reject a return')."""
