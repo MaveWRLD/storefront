@@ -1,0 +1,82 @@
+from unittest.mock import patch
+
+from rest_framework.test import APIClient
+from rest_framework import status
+import pytest
+
+from orders.models import Order
+from payment.models import Payment
+
+
+@pytest.fixture
+def order():
+    return Order.objects.create(
+        fulfillment_method=Order.FULFILLMENT_DELIVERY,
+        guest_name='Guest',
+        guest_email='guest@example.com',
+        guest_phone='0800000000',
+    )
+
+
+def initialize(order_id):
+    client = APIClient()
+    with patch('payment.serializers.initialize_transaction') as mocked:
+        mocked.return_value = {'authorization_url': 'https://paystack.test/pay'}
+        return client.post('/store/payments/initialize/', {'order_id': order_id})
+
+
+def verify_as(reference, outcome_status):
+    client = APIClient()
+    with patch('payment.serializers.verify_transaction') as mocked:
+        mocked.return_value = {'status': outcome_status}
+        return client.post('/store/payments/verify/', {'reference': reference})
+
+
+@pytest.mark.django_db
+class TestRetryFailedPayment:
+    def test_retry_after_failure_creates_a_new_payment_against_the_same_order(self, order):
+        first = initialize(order.id)
+        verify_as(first.data['reference'], 'failed')
+
+        second = initialize(order.id)
+
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data['reference'] != first.data['reference']
+        assert Payment.objects.filter(order=order).count() == 2
+
+    def test_order_stays_open_after_failed_payment_so_it_can_be_retried(self, order):
+        first = initialize(order.id)
+        verify_as(first.data['reference'], 'failed')
+
+        order.refresh_from_db()
+        assert order.payment_status == Order.PAYMENT_STATUS_PENDING
+
+    def test_retries_are_not_capped(self, order):
+        for _ in range(5):
+            attempt = initialize(order.id)
+            assert attempt.status_code == status.HTTP_200_OK
+            verify_as(attempt.data['reference'], 'failed')
+
+        assert Payment.objects.filter(order=order).count() == 5
+        order.refresh_from_db()
+        assert order.payment_status == Order.PAYMENT_STATUS_PENDING
+
+    def test_cannot_retry_once_payment_already_succeeded(self, order):
+        first = initialize(order.id)
+        verify_as(first.data['reference'], 'success')
+
+        again = initialize(order.id)
+
+        assert again.status_code == status.HTTP_400_BAD_REQUEST
+        order.refresh_from_db()
+        assert order.payment_status == Order.PAYMENT_STATUS_COMPLETE
+
+    def test_successful_retry_after_prior_failures_completes_the_order(self, order):
+        first = initialize(order.id)
+        verify_as(first.data['reference'], 'failed')
+
+        second = initialize(order.id)
+        verify_as(second.data['reference'], 'success')
+
+        order.refresh_from_db()
+        assert order.payment_status == Order.PAYMENT_STATUS_COMPLETE

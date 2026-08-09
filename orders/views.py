@@ -16,9 +16,6 @@ class OrderViewSet(ModelViewSet):
     def get_permissions(self):
         if self.request.method in ['PATCH', 'DELETE']:
             return [IsAdminUser()]
-        # Guest checkout: placing an order, and a guest looking one up by
-        # order id + email, must not require login. Listing/retrieving by id
-        # still does.
         if self.action in ['create', 'lookup']:
             return [AllowAny()]
         return [IsAuthenticated()]
@@ -35,7 +32,6 @@ class OrderViewSet(ModelViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def lookup(self, request):
-        """Guest order tracking: order id + checkout email, no login."""
         serializer = GuestOrderLookupSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         order = serializer.validated_data['order']
