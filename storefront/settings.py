@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'drf_spectacular',
     'djoser',
+    'corsheaders',
     'debug_toolbar',
     'djmoney',
     'catalog',
@@ -61,6 +62,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -74,6 +76,15 @@ INTERNAL_IPS = [
     '127.0.0.1',
     # ...
 ]
+
+# CORS: allow the local Refine dev server(s) to call this API with a
+# Bearer token (Authorization header). Add production frontend origin(s)
+# here once deployed — do not use CORS_ALLOW_ALL_ORIGINS in production.
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',   # Vite default
+    'http://localhost:3000',   # CRA/Next default
+]
+CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'storefront.urls'
 
