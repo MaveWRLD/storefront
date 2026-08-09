@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -15,6 +16,9 @@ class CustomerViewSet(GenericViewSet):
     serializer_class = CustomerSerializer
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary='Get or update my profile',
+        description='GET returns the authenticated customer\'s own profile; PUT replaces it.')
     @action(detail=False, methods=['GET', 'PUT'])
     def me(self, request):
         customer = Customer.objects.get(
@@ -29,6 +33,26 @@ class CustomerViewSet(GenericViewSet):
             return Response(serializer.data)
 
 
+@extend_schema_view(
+    list=extend_schema(
+        summary='List customers',
+        description='List/search all customers by name, email, or phone. Staff-only.'),
+    retrieve=extend_schema(
+        summary='Get customer',
+        description='Retrieve a single customer profile by id. Staff-only.'),
+    create=extend_schema(
+        summary='Create customer',
+        description='Create a customer profile. Staff-only.'),
+    update=extend_schema(
+        summary='Replace customer',
+        description='Full update of a customer profile. Staff-only.'),
+    partial_update=extend_schema(
+        summary='Update customer',
+        description='Partial update of a customer profile. Staff-only.'),
+    destroy=extend_schema(
+        summary='Delete customer',
+        description='Delete a customer profile. Staff-only.'),
+)
 class CustomerAdminViewSet(ModelViewSet):
     """store-admin/: 'admin searches for a customer... opens a customer's
     profile... sees the customer's details and order history.' (US-27)"""
@@ -38,6 +62,9 @@ class CustomerAdminViewSet(ModelViewSet):
     filter_backends = [SearchFilter]
     search_fields = ['user__first_name', 'user__last_name', 'user__email', 'phone']
 
+    @extend_schema(
+        summary='Get customer order history',
+        description="List a customer's past orders. Staff-only.")
     @action(detail=True)
     def history(self, request, pk):
         orders = Order.objects.filter(
