@@ -31,14 +31,14 @@ class TestBrowseProducts:
     def test_anonymous_can_list_products(self, make_product):
         make_product()
         client = APIClient()
-        response = client.get('/store/products/')
+        response = client.get('/store-front/products/')
         assert response.status_code == status.HTTP_200_OK
 
     def test_published_product_shows_name_price_and_is_available_true(self, make_product):
         make_product(title='Published Shirt', slug='published-shirt',
                      status=ProductStatus.PUBLISHED)
         client = APIClient()
-        response = client.get('/store/products/')
+        response = client.get('/store-front/products/')
 
         item = next(p for p in response.data['results']
                     if p['title'] == 'Published Shirt')
@@ -50,7 +50,7 @@ class TestBrowseProducts:
         make_product(title='Draft Shirt', slug='draft-shirt',
                      status=ProductStatus.DRAFT)
         client = APIClient()
-        response = client.get('/store/products/')
+        response = client.get('/store-front/products/')
 
         item = next(p for p in response.data['results']
                     if p['title'] == 'Draft Shirt')
@@ -60,7 +60,7 @@ class TestBrowseProducts:
         make_product(title='Archived Shirt', slug='archived-shirt',
                      status=ProductStatus.ARCHIVED)
         client = APIClient()
-        response = client.get('/store/products/')
+        response = client.get('/store-front/products/')
 
         item = next(p for p in response.data['results']
                     if p['title'] == 'Archived Shirt')
@@ -73,6 +73,6 @@ class TestBrowseProducts:
     def test_product_detail_includes_images_list(self, make_product):
         product = make_product()
         client = APIClient()
-        response = client.get(f'/store/products/{product.id}/')
+        response = client.get(f'/store-front/products/{product.id}/')
         assert response.status_code == status.HTTP_200_OK
         assert response.data['images'] == []

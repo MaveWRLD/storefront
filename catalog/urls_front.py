@@ -4,7 +4,7 @@ from . import views
 router = routers.DefaultRouter()
 router.include_root_view = False
 router.register('products', views.ProductViewSet, basename='products')
-router.register('collections', views.CollectionViewSet)
+router.register('collections', views.CollectionViewSet, basename='collections')
 
 products_router = routers.NestedDefaultRouter(
     router, 'products', lookup='product')

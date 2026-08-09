@@ -63,7 +63,7 @@ class TestReviewReturnRequests:
         make_return(customer)
         make_return(customer)
 
-        response = admin_client.get('/store/returns/')
+        response = admin_client.get('/store-admin/returns/')
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 2
@@ -72,7 +72,7 @@ class TestReviewReturnRequests:
         customer, client = customer_and_client
         make_return(customer)
 
-        response = client.get('/store/returns/')
+        response = client.get('/store-admin/returns/')
 
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
@@ -80,7 +80,7 @@ class TestReviewReturnRequests:
     def test_anonymous_cannot_list_all_returns(self):
         client = APIClient()
 
-        response = client.get('/store/returns/')
+        response = client.get('/store-admin/returns/')
 
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)

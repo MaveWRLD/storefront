@@ -32,7 +32,7 @@ def cart():
 
 def place_order(cart_id):
     client = APIClient()
-    return client.post('/store/orders/', {
+    return client.post('/store-front/orders/', {
         'cart_id': str(cart_id),
         'fulfillment_method': Order.FULFILLMENT_DELIVERY,
         'guest_name': 'Guest',
