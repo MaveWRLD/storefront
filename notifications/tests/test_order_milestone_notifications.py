@@ -35,10 +35,10 @@ def initialize_and_pay(order_id, outcome_status='success'):
     client = APIClient()
     with patch('payment.serializers.initialize_transaction') as mocked:
         mocked.return_value = {'authorization_url': 'https://paystack.test/pay'}
-        init_response = client.post('/store/payments/initialize/', {'order_id': order_id})
+        init_response = client.post('/store-front/payments/initialize/', {'order_id': order_id})
     with patch('payment.serializers.verify_transaction') as mocked:
         mocked.return_value = {'status': outcome_status}
-        client.post('/store/payments/verify/', {'reference': init_response.data['reference']})
+        client.post('/store-front/payments/verify/', {'reference': init_response.data['reference']})
 
 
 @pytest.mark.django_db
@@ -74,7 +74,7 @@ class TestOrderMilestoneNotifications:
         order = make_order(Order.FULFILLMENT_PICKUP)
 
         admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
 
         assert Notification.objects.filter(
             order=order, event_type=Notification.EVENT_READY_FOR_PICKUP).exists()
@@ -83,7 +83,7 @@ class TestOrderMilestoneNotifications:
         order = make_order(Order.FULFILLMENT_DELIVERY)
 
         admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
 
         assert Notification.objects.filter(
             order=order, event_type=Notification.EVENT_OUT_FOR_DELIVERY).exists()
@@ -93,7 +93,7 @@ class TestOrderMilestoneNotifications:
             Order.FULFILLMENT_DELIVERY, order_status=Order.STATUS_OUT_FOR_DELIVERY)
 
         admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_COMPLETED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_COMPLETED})
 
         assert Notification.objects.filter(
             order=order, event_type=Notification.EVENT_DELIVERED).exists()

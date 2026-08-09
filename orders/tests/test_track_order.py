@@ -22,17 +22,17 @@ def pay_successfully(order_id):
     with patch('payment.serializers.initialize_transaction') as init_mock:
         init_mock.return_value = {'authorization_url': 'https://paystack.test/pay'}
         reference = client.post(
-            '/store/payments/initialize/', {'order_id': order_id}).data['reference']
+            '/store-front/payments/initialize/', {'order_id': order_id}).data['reference']
     with patch('payment.serializers.verify_transaction') as verify_mock:
         verify_mock.return_value = {'status': 'success'}
-        client.post('/store/payments/verify/', {'reference': reference})
+        client.post('/store-front/payments/verify/', {'reference': reference})
 
 
 @pytest.mark.django_db
 class TestTrackOrder:
     def test_newly_placed_unpaid_order_has_no_stage_yet(self, order):
         client = APIClient()
-        response = client.post('/store/orders/lookup/', {
+        response = client.post('/store-front/orders/lookup/', {
             'order_id': order.id, 'email': order.guest_email})
         assert response.data['status'] == ''
 
@@ -40,7 +40,7 @@ class TestTrackOrder:
         pay_successfully(order.id)
 
         client = APIClient()
-        response = client.post('/store/orders/lookup/', {
+        response = client.post('/store-front/orders/lookup/', {
             'order_id': order.id, 'email': order.guest_email})
 
         assert response.status_code == status.HTTP_200_OK

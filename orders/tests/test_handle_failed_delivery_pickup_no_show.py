@@ -54,7 +54,7 @@ class TestHandleFailedDeliveryPickupNoShow:
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_DELIVERY_FAILED, quantity=2)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
 
         assert response.status_code == status.HTTP_200_OK
         order.refresh_from_db()
@@ -66,7 +66,7 @@ class TestHandleFailedDeliveryPickupNoShow:
         order = make_order(Order.FULFILLMENT_PICKUP, Order.STATUS_PENDING_RESOLUTION, quantity=3)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
 
         assert response.status_code == status.HTTP_200_OK
         order.refresh_from_db()
@@ -77,7 +77,7 @@ class TestHandleFailedDeliveryPickupNoShow:
     def test_cancelled_order_restocks_each_line_once(self, admin_client, make_order, variant):
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_DELIVERY_FAILED, quantity=1)
 
-        admin_client.patch(f'/store/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
+        admin_client.patch(f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
 
         variant.refresh_from_db()
         assert variant.inventory == 1
@@ -86,16 +86,16 @@ class TestHandleFailedDeliveryPickupNoShow:
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_OUT_FOR_DELIVERY)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_cancelled_order_cannot_transition_further(self, admin_client, make_order):
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_DELIVERY_FAILED)
-        admin_client.patch(f'/store/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
+        admin_client.patch(f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -104,7 +104,7 @@ class TestHandleFailedDeliveryPickupNoShow:
         client = APIClient()
 
         response = client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
 
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)

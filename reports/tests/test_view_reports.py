@@ -51,7 +51,7 @@ class TestViewReports:
         paid_order(variant, quantity=1)
         paid_order(variant, quantity=2)
 
-        response = admin_client.get('/store/reports/sales/')
+        response = admin_client.get('/store-admin/reports/sales/')
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['order_count'] == 2
@@ -66,7 +66,7 @@ class TestViewReports:
         paid_order(variant, quantity=5)
         paid_order(other_variant, quantity=1)
 
-        response = admin_client.get('/store/reports/sales/')
+        response = admin_client.get('/store-admin/reports/sales/')
 
         top = response.data['top_products']
         assert top[0]['title'] == 'Test Shirt'
@@ -81,7 +81,7 @@ class TestViewReports:
         OrderItem.objects.create(
             order=unpaid, variant=variant, quantity=1, unit_price=variant.unit_price)
 
-        response = admin_client.get('/store/reports/sales/')
+        response = admin_client.get('/store-admin/reports/sales/')
 
         assert response.data['order_count'] == 0
 
@@ -90,17 +90,17 @@ class TestViewReports:
         paid_order(variant, quantity=1, placed_at='2026-01-01T00:00:00Z')
 
         response = admin_client.get(
-            '/store/reports/sales/', {'start': '2025-01-01', 'end': '2026-12-31'})
+            '/store-admin/reports/sales/', {'start': '2025-01-01', 'end': '2026-12-31'})
 
         assert response.data['order_count'] == 1
 
     def test_non_admin_cannot_view_reports(self):
         client = APIClient()
         client.force_authenticate(user=User())
-        response = client.get('/store/reports/sales/')
+        response = client.get('/store-admin/reports/sales/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_anonymous_cannot_view_reports(self):
         client = APIClient()
-        response = client.get('/store/reports/sales/')
+        response = client.get('/store-admin/reports/sales/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED

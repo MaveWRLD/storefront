@@ -32,7 +32,7 @@ class TestAbandonCheckout:
         CartItem.objects.create(cart=cart, variant=variant, quantity=1)
 
         client = APIClient()
-        response = client.get(f'/store/carts/{cart.id}/')
+        response = client.get(f'/store-front/carts/{cart.id}/')
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['items']) == 1
@@ -55,7 +55,7 @@ class TestAbandonCheckout:
 
         client = APIClient()
         response = client.post(
-            f'/store/carts/{cart.id}/items/',
+            f'/store-front/carts/{cart.id}/items/',
             {'variant_id': variant.id, 'quantity': 1})
 
         assert response.status_code == status.HTTP_201_CREATED

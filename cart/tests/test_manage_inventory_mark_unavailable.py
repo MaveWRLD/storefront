@@ -45,7 +45,7 @@ class TestManageInventoryMarkUnavailable:
         product = make_product(inventory=0)
         client = APIClient()
         response = client.post(
-            f'/store/carts/{cart.id}/items/',
+            f'/store-front/carts/{cart.id}/items/',
             {'variant_id': product.variant.id, 'quantity': 1})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -53,31 +53,31 @@ class TestManageInventoryMarkUnavailable:
         product = make_product(inventory=10, status=ProductStatus.PUBLISHED)
 
         patch_response = admin_client.patch(
-            f'/store/products/{product.id}/', {'status': ProductStatus.ARCHIVED})
+            f'/store-admin/products/{product.id}/', {'status': ProductStatus.ARCHIVED})
         assert patch_response.status_code == status.HTTP_200_OK
 
         client = APIClient()
         response = client.post(
-            f'/store/carts/{cart.id}/items/',
+            f'/store-front/carts/{cart.id}/items/',
             {'variant_id': product.variant.id, 'quantity': 1})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_unavailable_product_shown_as_unavailable_on_storefront(self, make_product):
         product = make_product(status=ProductStatus.ARCHIVED)
         client = APIClient()
-        response = client.get(f'/store/products/{product.id}/')
+        response = client.get(f'/store-front/products/{product.id}/')
         assert response.data['is_available'] is False
 
     def test_replenished_and_republished_product_can_be_added_to_cart_again(self, admin_client, cart, make_product):
         product = make_product(inventory=0, status=ProductStatus.ARCHIVED)
 
         admin_client.patch(
-            f'/store/products/{product.id}/', {'status': ProductStatus.PUBLISHED})
+            f'/store-admin/products/{product.id}/', {'status': ProductStatus.PUBLISHED})
         Variant.objects.filter(pk=product.variant.id).update(inventory=10)
 
         client = APIClient()
         response = client.post(
-            f'/store/carts/{cart.id}/items/',
+            f'/store-front/carts/{cart.id}/items/',
             {'variant_id': product.variant.id, 'quantity': 1})
         assert response.status_code == status.HTTP_201_CREATED
 
@@ -85,6 +85,6 @@ class TestManageInventoryMarkUnavailable:
         product = make_product(inventory=5, status=ProductStatus.PUBLISHED)
         client = APIClient()
         response = client.post(
-            f'/store/carts/{cart.id}/items/',
+            f'/store-front/carts/{cart.id}/items/',
             {'variant_id': product.variant.id, 'quantity': 1})
         assert response.status_code == status.HTTP_201_CREATED

@@ -40,7 +40,7 @@ def products(collections):
 class TestSearchFilterProducts:
     def test_search_by_title_returns_only_matching_products(self, products):
         client = APIClient()
-        response = client.get('/store/products/', {'search': 'Jacket'})
+        response = client.get('/store-front/products/', {'search': 'Jacket'})
 
         assert response.status_code == status.HTTP_200_OK
         titles = [p['title'] for p in response.data['results']]
@@ -48,7 +48,7 @@ class TestSearchFilterProducts:
 
     def test_search_is_case_insensitive_and_matches_description(self, products):
         client = APIClient()
-        response = client.get('/store/products/', {'search': 'cotton'})
+        response = client.get('/store-front/products/', {'search': 'cotton'})
 
         titles = [p['title'] for p in response.data['results']]
         assert titles == ['Red T-Shirt']
@@ -56,7 +56,7 @@ class TestSearchFilterProducts:
     def test_filter_by_category_returns_only_that_categorys_products(self, products, collections):
         client = APIClient()
         response = client.get(
-            '/store/products/', {'collection_id': collections['pants'].id})
+            '/store-front/products/', {'collection_id': collections['pants'].id})
 
         titles = [p['title'] for p in response.data['results']]
         assert titles == ['Black Jeans']
@@ -64,14 +64,14 @@ class TestSearchFilterProducts:
     def test_filter_by_price_range(self, products):
         client = APIClient()
         response = client.get(
-            '/store/products/', {'unit_price__lt': 4000, 'unit_price__gt': 2000})
+            '/store-front/products/', {'unit_price__lt': 4000, 'unit_price__gt': 2000})
 
         titles = [p['title'] for p in response.data['results']]
         assert titles == ['Black Jeans']
 
     def test_no_match_returns_empty_list_not_error(self, products):
         client = APIClient()
-        response = client.get('/store/products/', {'search': 'nonexistentitem'})
+        response = client.get('/store-front/products/', {'search': 'nonexistentitem'})
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['results'] == []

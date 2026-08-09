@@ -22,14 +22,14 @@ def initialize(order_id):
     client = APIClient()
     with patch('payment.serializers.initialize_transaction') as mocked:
         mocked.return_value = {'authorization_url': 'https://paystack.test/pay'}
-        return client.post('/store/payments/initialize/', {'order_id': order_id})
+        return client.post('/store-front/payments/initialize/', {'order_id': order_id})
 
 
 def verify_as(reference, outcome_status):
     client = APIClient()
     with patch('payment.serializers.verify_transaction') as mocked:
         mocked.return_value = {'status': outcome_status}
-        return client.post('/store/payments/verify/', {'reference': reference})
+        return client.post('/store-front/payments/verify/', {'reference': reference})
 
 
 @pytest.mark.django_db
