@@ -62,7 +62,7 @@ class TestRequestReturn:
         customer, client = customer_and_client
         order, item = make_order(customer=customer)
 
-        response = client.post('/store/returns/', {
+        response = client.post('/store-front/returns/', {
             'order_id': order.id, 'order_item_id': item.id,
             'quantity': 1, 'reason': 'Wrong size',
         })
@@ -76,7 +76,7 @@ class TestRequestReturn:
         order, item = make_order(customer=None)
         client = APIClient()
 
-        response = client.post('/store/returns/', {
+        response = client.post('/store-front/returns/', {
             'order_id': order.id, 'order_item_id': item.id,
             'quantity': 1, 'reason': 'Damaged', 'email': 'guest@example.com',
         })
@@ -88,7 +88,7 @@ class TestRequestReturn:
         order, item = make_order(customer=None)
         client = APIClient()
 
-        response = client.post('/store/returns/', {
+        response = client.post('/store-front/returns/', {
             'order_id': order.id, 'order_item_id': item.id,
             'quantity': 1, 'reason': 'Damaged', 'email': 'someoneelse@example.com',
         })
@@ -100,7 +100,7 @@ class TestRequestReturn:
         customer, client = customer_and_client
         order, item = make_order(customer=customer, order_status=Order.STATUS_CONFIRMED)
 
-        response = client.post('/store/returns/', {
+        response = client.post('/store-front/returns/', {
             'order_id': order.id, 'order_item_id': item.id,
             'quantity': 1, 'reason': 'Changed my mind',
         })
@@ -115,7 +115,7 @@ class TestRequestReturn:
         other_customer = Customer.objects.get(user=other_user)
         order, item = make_order(customer=other_customer)
 
-        response = client.post('/store/returns/', {
+        response = client.post('/store-front/returns/', {
             'order_id': order.id, 'order_item_id': item.id,
             'quantity': 1, 'reason': 'Not mine',
         })
@@ -127,7 +127,7 @@ class TestRequestReturn:
         customer, client = customer_and_client
         order, item = make_order(customer=customer, quantity=1)
 
-        response = client.post('/store/returns/', {
+        response = client.post('/store-front/returns/', {
             'order_id': order.id, 'order_item_id': item.id,
             'quantity': 2, 'reason': 'Too many',
         })

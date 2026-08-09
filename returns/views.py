@@ -11,20 +11,12 @@ from .serializers import (
 )
 
 
-class ReturnViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, GenericViewSet):
+class ReturnViewSet(CreateModelMixin, RetrieveModelMixin, GenericViewSet):
+    """store-front/: create and retrieve (ownership-checked; guest allowed
+    via order number + contact match)."""
     queryset = Return.objects.select_related('order_item__order')
     serializer_class = ReturnSerializer
-
-    def get_permissions(self):
-        # US-26/US-17: 'Only Admin can approve/reject a return' — reviewing
-        # (including browsing the list to find something to review) is
-        # admin-only; requesting and tracking a single one stay open to
-        # guests too (Business Rule: 'Guests manage returns via order
-        # number + contact match'), ownership is checked inside
-        # create()/retrieve() instead.
-        if self.request.method == 'PATCH' or self.action == 'list':
-            return [IsAdminUser()]
-        return [AllowAny()]
+    permission_classes = [AllowAny]
 
     def create(self, request, *args, **kwargs):
         user = request.user if request.user.is_authenticated else None
@@ -45,6 +37,15 @@ class ReturnViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, Generi
                 raise PermissionDenied(
                     'This return does not belong to you.')
         return Response(ReturnSerializer(return_request).data)
+
+
+class ReturnAdminViewSet(ListModelMixin, GenericViewSet):
+    """store-admin/: list, review (approve/reject) via partial_update
+    (US-26/US-17: 'Only Admin can approve/reject a return')."""
+    http_method_names = ['get', 'patch', 'head', 'options']
+    queryset = Return.objects.select_related('order_item__order')
+    serializer_class = ReturnSerializer
+    permission_classes = [IsAdminUser]
 
     def partial_update(self, request, *args, **kwargs):
         return_request = self.get_object()

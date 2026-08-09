@@ -71,7 +71,7 @@ class TestTrackReturnOutcome:
         with patch('returns.serializers.refund_transaction') as mocked:
             mocked.return_value = {'status': 'success'}
             response = admin_client.patch(
-                f'/store/returns/{pending_return.id}/', {'action': 'approve'})
+                f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['status'] == Return.STATUS_APPROVED
@@ -82,7 +82,7 @@ class TestTrackReturnOutcome:
     def test_admin_rejecting_a_return_requires_a_reason_and_issues_no_refund(self, admin_client, pending_return):
         with patch('returns.serializers.refund_transaction') as mocked:
             response = admin_client.patch(
-                f'/store/returns/{pending_return.id}/',
+                f'/store-admin/returns/{pending_return.id}/',
                 {'action': 'reject', 'reason': 'Item shows signs of wear'})
 
         assert response.status_code == status.HTTP_200_OK
@@ -92,7 +92,7 @@ class TestTrackReturnOutcome:
 
     def test_rejecting_without_a_reason_is_rejected(self, admin_client, pending_return):
         response = admin_client.patch(
-            f'/store/returns/{pending_return.id}/', {'action': 'reject'})
+            f'/store-admin/returns/{pending_return.id}/', {'action': 'reject'})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         pending_return.refresh_from_db()
@@ -102,7 +102,7 @@ class TestTrackReturnOutcome:
         _, client = customer_and_client
 
         response = client.patch(
-            f'/store/returns/{pending_return.id}/', {'action': 'approve'})
+            f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
 
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
@@ -112,10 +112,10 @@ class TestTrackReturnOutcome:
     def test_cannot_review_a_return_that_was_already_reviewed(self, admin_client, pending_return):
         with patch('returns.serializers.refund_transaction'):
             admin_client.patch(
-                f'/store/returns/{pending_return.id}/', {'action': 'approve'})
+                f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
 
         response = admin_client.patch(
-            f'/store/returns/{pending_return.id}/',
+            f'/store-admin/returns/{pending_return.id}/',
             {'action': 'reject', 'reason': 'Too late'})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -125,9 +125,9 @@ class TestTrackReturnOutcome:
         with patch('returns.serializers.refund_transaction'):
             admin = APIClient()
             admin.force_authenticate(user=User(is_staff=True))
-            admin.patch(f'/store/returns/{pending_return.id}/', {'action': 'approve'})
+            admin.patch(f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
 
-        response = client.get(f'/store/returns/{pending_return.id}/')
+        response = client.get(f'/store-front/returns/{pending_return.id}/')
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['status'] == Return.STATUS_APPROVED
@@ -138,7 +138,7 @@ class TestTrackReturnOutcome:
         client = APIClient()
         client.force_authenticate(user=other_user)
 
-        response = client.get(f'/store/returns/{pending_return.id}/')
+        response = client.get(f'/store-front/returns/{pending_return.id}/')
 
         assert response.status_code in (
             status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
@@ -150,7 +150,7 @@ def test_return_decision_notifies_customer(admin_client, pending_return):
 
     with patch('returns.serializers.refund_transaction'):
         admin_client.patch(
-            f'/store/returns/{pending_return.id}/', {'action': 'approve'})
+            f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
 
     assert Notification.objects.filter(
         order=pending_return.order_item.order,

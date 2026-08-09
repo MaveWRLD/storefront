@@ -35,20 +35,20 @@ class TestManageCustomers:
             first_name='Bob', last_name='Smith')
         Customer.objects.get(user=other_user)
 
-        response = admin_client.get('/store/customers/', {'search': 'Jane'})
+        response = admin_client.get('/store-admin/customers/', {'search': 'Jane'})
 
         assert response.status_code == status.HTTP_200_OK
         user_ids = [c['user_id'] for c in response.data]
         assert user_ids == [customer.user_id]
 
     def test_admin_searches_customers_by_email(self, admin_client, customer):
-        response = admin_client.get('/store/customers/', {'search': 'jane@example.com'})
+        response = admin_client.get('/store-admin/customers/', {'search': 'jane@example.com'})
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
 
     def test_admin_opens_customer_profile(self, admin_client, customer):
-        response = admin_client.get(f'/store/customers/{customer.id}/')
+        response = admin_client.get(f'/store-admin/customers/{customer.id}/')
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['id'] == customer.id
@@ -65,7 +65,7 @@ class TestManageCustomers:
             customer=customer,
         )
 
-        response = admin_client.get(f'/store/customers/{customer.id}/history/')
+        response = admin_client.get(f'/store-admin/customers/{customer.id}/history/')
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 2
@@ -77,7 +77,7 @@ class TestManageCustomers:
         Order.objects.create(
             fulfillment_method=Order.FULFILLMENT_PICKUP, customer=other_customer)
 
-        response = admin_client.get(f'/store/customers/{customer.id}/history/')
+        response = admin_client.get(f'/store-admin/customers/{customer.id}/history/')
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data == []
@@ -85,10 +85,10 @@ class TestManageCustomers:
     def test_non_admin_cannot_manage_customers(self, customer):
         client = APIClient()
         client.force_authenticate(user=User())
-        response = client.get('/store/customers/')
+        response = client.get('/store-admin/customers/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_anonymous_cannot_manage_customers(self, customer):
         client = APIClient()
-        response = client.get('/store/customers/')
+        response = client.get('/store-admin/customers/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED

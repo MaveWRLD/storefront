@@ -41,7 +41,7 @@ class TestPickupReadyOrder:
             Order.FULFILLMENT_PICKUP, order_status=Order.STATUS_READY_FOR_PICKUP)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/',
+            f'/store-admin/orders/{order.id}/',
             {'status': Order.STATUS_PENDING_RESOLUTION})
 
         assert response.status_code == status.HTTP_200_OK
@@ -53,7 +53,7 @@ class TestPickupReadyOrder:
             Order.FULFILLMENT_PICKUP, order_status=Order.STATUS_CONFIRMED)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/',
+            f'/store-admin/orders/{order.id}/',
             {'status': Order.STATUS_PENDING_RESOLUTION})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -63,7 +63,7 @@ class TestPickupReadyOrder:
             Order.FULFILLMENT_DELIVERY, order_status=Order.STATUS_OUT_FOR_DELIVERY)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/',
+            f'/store-admin/orders/{order.id}/',
             {'status': Order.STATUS_PENDING_RESOLUTION})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -73,7 +73,7 @@ class TestPickupReadyOrder:
             Order.FULFILLMENT_PICKUP, order_status=Order.STATUS_PENDING_RESOLUTION)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_COMPLETED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_COMPLETED})
 
         assert response.status_code == status.HTTP_200_OK
         order.refresh_from_db()
@@ -84,7 +84,7 @@ class TestPickupReadyOrder:
             Order.FULFILLMENT_PICKUP, order_status=Order.STATUS_PENDING_RESOLUTION)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/',
+            f'/store-admin/orders/{order.id}/',
             {'status': Order.STATUS_READY_FOR_PICKUP})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST

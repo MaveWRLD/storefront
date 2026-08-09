@@ -33,23 +33,27 @@ admin.site.index_title = 'Admin'
 def store_api_root(request, format=None):
     return Response({
         'products': reverse('products-list', request=request, format=format),
-        'collections': reverse('collection-list', request=request, format=format),
+        'collections': reverse('collections-list', request=request, format=format),
         'carts': reverse('cart-list', request=request, format=format),
-        'customers': reverse('customer-list', request=request, format=format),
+        'customers': reverse('customers-me', request=request, format=format),
         'orders': reverse('orders-list', request=request, format=format),
     })
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('store/', store_api_root, name='api-root'),
-    path('store/', include('catalog.urls')),
-    path('store/', include('cart.urls')),
-    path('store/', include('customers.urls')),
-    path('store/', include('orders.urls')),
-    path('store/', include('payment.urls')),
-    path('store/', include('returns.urls')),
-    path('store/', include('reports.urls')),
+    path('store-front/', store_api_root, name='api-root'),
+    path('store-front/', include('catalog.urls_front')),
+    path('store-front/', include('cart.urls')),
+    path('store-front/', include('customers.urls_front')),
+    path('store-front/', include('orders.urls_front')),
+    path('store-front/', include('payment.urls')),
+    path('store-front/', include('returns.urls_front')),
+    path('store-admin/', include('catalog.urls_admin')),
+    path('store-admin/', include('customers.urls_admin')),
+    path('store-admin/', include('orders.urls_admin')),
+    path('store-admin/', include('returns.urls_admin')),
+    path('store-admin/', include('reports.urls')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
