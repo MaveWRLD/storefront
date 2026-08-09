@@ -3,7 +3,7 @@ from . import models
 
 
 class OrderItemInline(admin.TabularInline):
-    autocomplete_fields = ['product']
+    autocomplete_fields = ['variant']
     min_num = 1
     max_num = 10
     model = models.OrderItem

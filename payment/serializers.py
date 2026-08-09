@@ -2,6 +2,8 @@ from uuid import uuid4
 
 from rest_framework import serializers
 
+from notifications.models import Notification
+from notifications.services import notify
 from orders.models import Order
 from .gateway import PaystackError, initialize_transaction, verify_transaction
 from .models import Payment
@@ -55,12 +57,22 @@ class VerifyPaymentSerializer(serializers.Serializer):
         if data.get('status') == 'success':
             payment.status = Payment.STATUS_SUCCESS
             payment.order.payment_status = Order.PAYMENT_STATUS_COMPLETE
+            # US-13: payment success is what moves an order into tracking.
+            payment.order.status = Order.STATUS_CONFIRMED
         else:
             payment.status = Payment.STATUS_FAILED
             # Order stays PENDING (its default) so the customer can retry (US-11).
 
         payment.save()
         payment.order.save()
+
+        if payment.status == Payment.STATUS_SUCCESS:
+            # Business Rule (Notifications): 'Customer notified at every
+            # status-changing milestone'.
+            notify(
+                payment.order, Notification.EVENT_ORDER_CONFIRMED,
+                'Your order has been confirmed.')
+
         return payment
 
 

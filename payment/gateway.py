@@ -51,3 +51,20 @@ def verify_transaction(reference):
     if not response.ok or not data.get('status'):
         raise PaystackError(data.get('message', 'Could not verify payment.'))
     return data['data']  # includes 'status': 'success' | 'failed' | ...
+
+
+def refund_transaction(reference):
+    """Business Rule (Returns & Refunds): 'Rejected return: item back to
+    customer, no refund; approved: Paystack refund' — full refund of the
+    original transaction, no partial-amount support (single item per order
+    in this domain's simplified scope)."""
+    response = requests.post(
+        f'{PAYSTACK_BASE_URL}/refund',
+        json={'transaction': reference},
+        headers=_headers(),
+        timeout=10,
+    )
+    data = response.json()
+    if not response.ok or not data.get('status'):
+        raise PaystackError(data.get('message', 'Could not issue refund.'))
+    return data['data']
