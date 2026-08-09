@@ -1,9 +1,21 @@
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.mixins import CreateModelMixin, DestroyModelMixin, RetrieveModelMixin
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from .models import Cart, CartItem
 from .serializers import AddCartItemSerializer, CartItemSerializer, CartSerializer, UpdateCartItemSerializer
 
 
+@extend_schema_view(
+    create=extend_schema(
+        summary='Create a cart',
+        description='Start a new, empty cart. Open to everyone.'),
+    retrieve=extend_schema(
+        summary='Get cart',
+        description='Retrieve a cart and its items by id. Open to everyone.'),
+    destroy=extend_schema(
+        summary='Delete cart',
+        description='Discard a cart and its items. Open to everyone.'),
+)
 class CartViewSet(CreateModelMixin,
                   RetrieveModelMixin,
                   DestroyModelMixin,
@@ -12,6 +24,23 @@ class CartViewSet(CreateModelMixin,
     serializer_class = CartSerializer
 
 
+@extend_schema_view(
+    list=extend_schema(
+        summary='List cart items',
+        description='List the items in a cart. Open to everyone.'),
+    retrieve=extend_schema(
+        summary='Get cart item',
+        description='Retrieve a single cart item by id. Open to everyone.'),
+    create=extend_schema(
+        summary='Add item to cart',
+        description='Add a product variant to the cart. Rejected if the variant is out of stock or unavailable.'),
+    partial_update=extend_schema(
+        summary='Update cart item',
+        description='Change a cart item\'s quantity.'),
+    destroy=extend_schema(
+        summary='Remove cart item',
+        description='Remove an item from the cart.'),
+)
 class CartItemViewSet(ModelViewSet):
     http_method_names = ['get', 'post', 'patch', 'delete']
 
