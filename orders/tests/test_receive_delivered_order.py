@@ -35,7 +35,7 @@ class TestReceiveDeliveredOrder:
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_OUT_FOR_DELIVERY)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_COMPLETED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_COMPLETED})
 
         assert response.status_code == status.HTTP_200_OK
         order.refresh_from_db()
@@ -45,7 +45,7 @@ class TestReceiveDeliveredOrder:
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_OUT_FOR_DELIVERY)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_DELIVERY_FAILED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_DELIVERY_FAILED})
 
         assert response.status_code == status.HTTP_200_OK
         order.refresh_from_db()
@@ -55,7 +55,7 @@ class TestReceiveDeliveredOrder:
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_DELIVERY_FAILED)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
 
         assert response.status_code == status.HTTP_200_OK
         order.refresh_from_db()
@@ -65,7 +65,7 @@ class TestReceiveDeliveredOrder:
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_DELIVERY_FAILED)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_COMPLETED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_COMPLETED})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         order.refresh_from_db()
@@ -75,7 +75,7 @@ class TestReceiveDeliveredOrder:
         order = make_order(Order.FULFILLMENT_PICKUP, Order.STATUS_READY_FOR_PICKUP)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_DELIVERY_FAILED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_DELIVERY_FAILED})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -83,6 +83,6 @@ class TestReceiveDeliveredOrder:
         order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_FULFILLMENT)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_DELIVERY_FAILED})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_DELIVERY_FAILED})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST

@@ -41,7 +41,7 @@ def another_guest_order():
 class TestViewOrders:
     def test_admin_sees_all_orders_with_status_and_fulfillment_method(
             self, admin_client, guest_order, another_guest_order):
-        response = admin_client.get('/store/orders/')
+        response = admin_client.get('/store-admin/orders/')
 
         assert response.status_code == status.HTTP_200_OK
         order_ids = {o['id'] for o in response.data}
@@ -55,7 +55,7 @@ class TestViewOrders:
 
     def test_anonymous_cannot_list_orders(self, guest_order):
         client = APIClient()
-        response = client.get('/store/orders/')
+        response = client.get('/store-front/orders/')
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     def test_non_staff_customer_only_sees_their_own_orders(self, guest_order, another_guest_order):
@@ -68,7 +68,7 @@ class TestViewOrders:
 
         client = APIClient()
         client.force_authenticate(user=user)
-        response = client.get('/store/orders/')
+        response = client.get('/store-front/orders/')
 
         assert response.status_code == status.HTTP_200_OK
         order_ids = {o['id'] for o in response.data}

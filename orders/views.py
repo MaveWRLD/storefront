@@ -1,7 +1,11 @@
 from rest_framework.decorators import action
+from rest_framework.mixins import (
+    CreateModelMixin, DestroyModelMixin, ListModelMixin, RetrieveModelMixin,
+    UpdateModelMixin,
+)
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import GenericViewSet
 from customers.models import Customer
 from .models import Order
 from .serializers import (
@@ -10,12 +14,12 @@ from .serializers import (
 )
 
 
-class OrderViewSet(ModelViewSet):
-    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+class OrderViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, GenericViewSet):
+    """store-front/: create (guest checkout allowed), lookup (guest), and
+    list/retrieve limited to the caller's own orders."""
+    serializer_class = OrderSerializer
 
     def get_permissions(self):
-        if self.request.method in ['PATCH', 'DELETE']:
-            return [IsAdminUser()]
         if self.action in ['create', 'lookup']:
             return [AllowAny()]
         return [IsAuthenticated()]
@@ -40,16 +44,22 @@ class OrderViewSet(ModelViewSet):
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return CreateOrderSerializer
-        elif self.request.method == 'PATCH':
-            return UpdateOrderSerializer
         return OrderSerializer
 
     def get_queryset(self):
-        user = self.request.user
-
-        if user.is_staff:
-            return Order.objects.all()
-
         customer_id = Customer.objects.only(
-            'id').get(user_id=user.id)
+            'id').get(user_id=self.request.user.id)
         return Order.objects.filter(customer_id=customer_id)
+
+
+class OrderAdminViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin,
+                         DestroyModelMixin, GenericViewSet):
+    """store-admin/: list/retrieve all orders, update, destroy."""
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+    queryset = Order.objects.all()
+    permission_classes = [IsAdminUser]
+
+    def get_serializer_class(self):
+        if self.request.method == 'PATCH':
+            return UpdateOrderSerializer
+        return OrderSerializer

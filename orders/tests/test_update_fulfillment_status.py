@@ -36,7 +36,7 @@ class TestUpdateFulfillmentStatus:
         order = make_order(Order.FULFILLMENT_PICKUP)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
 
         assert response.status_code == status.HTTP_200_OK
         order.refresh_from_db()
@@ -46,7 +46,7 @@ class TestUpdateFulfillmentStatus:
         order = make_order(Order.FULFILLMENT_DELIVERY)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
 
         assert response.status_code == status.HTTP_200_OK
         order.refresh_from_db()
@@ -56,7 +56,7 @@ class TestUpdateFulfillmentStatus:
         order = make_order(Order.FULFILLMENT_DELIVERY)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         order.refresh_from_db()
@@ -66,7 +66,7 @@ class TestUpdateFulfillmentStatus:
         order = make_order(Order.FULFILLMENT_PICKUP)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_OUT_FOR_DELIVERY})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -76,7 +76,7 @@ class TestUpdateFulfillmentStatus:
             payment_status=Order.PAYMENT_STATUS_PENDING, order_status='')
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -85,7 +85,7 @@ class TestUpdateFulfillmentStatus:
             Order.FULFILLMENT_PICKUP, order_status=Order.STATUS_COMPLETED)
 
         response = admin_client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -94,7 +94,7 @@ class TestUpdateFulfillmentStatus:
         client = APIClient()
 
         response = client.patch(
-            f'/store/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
+            f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_READY_FOR_PICKUP})
 
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
