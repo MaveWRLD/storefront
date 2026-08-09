@@ -49,6 +49,9 @@ INSTALLED_APPS = [
     'cart',
     'orders',
     'payment',
+    'returns',
+    'notifications',
+    'reports',
     'tags',
     'likes',
     'core',
@@ -145,6 +148,11 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
+# Product images (US-02). No object-storage integration yet (that's a
+# separate infra concern) — local media storage for now.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
@@ -174,6 +182,18 @@ SIMPLE_JWT = {
 # django-money
 DEFAULT_CURRENCY = 'USD'
 CURRENCIES = ('USD',)
+
+# Cart (US-12, Business Rule: 'Abandoned checkout preserves the cart') —
+# a cart is only expired after this many days without activity (Cart.last_activity).
+# Single flat TTL, not Saleor's anonymous/user/empty-cart split (no auth-tied
+# checkout ownership in this domain yet).
+CART_ABANDONMENT_TTL_DAYS = 30
+
+# Payment (Business Rule: 'Checkout/payment session expiry' — payment
+# abandonAfter 1 hour): a Paystack transaction left PENDING this long is
+# considered abandoned. Doesn't block retrying (US-11 has no retry cap) —
+# just stops treating a stale attempt as still in flight.
+PAYMENT_ABANDON_AFTER_MINUTES = 60
 
 # Payment (US-10): Paystack is the only gateway (Business Rule: 'All payments
 # exclusively via Paystack'). Set a real key via env var in every real
