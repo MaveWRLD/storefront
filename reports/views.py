@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db.models import Sum
 from djmoney.money import Money
+from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,6 +16,9 @@ class SalesReportView(APIView):
     straight from the story's own acceptance criteria."""
     permission_classes = [IsAdminUser]
 
+    @extend_schema(
+        summary='Sales report',
+        description='Return order count, total sales, and top products, optionally filtered by a start/end date range. Staff-only.')
     def get(self, request):
         orders = Order.objects.filter(
             payment_status=Order.PAYMENT_STATUS_COMPLETE)

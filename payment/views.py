@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,6 +13,9 @@ class InitializePaymentView(APIView):
     guest checkout (US-06a) must not require an account to pay."""
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary='Initialize payment',
+        description='Start a Paystack transaction for an order and return its authorization URL. Open to everyone.')
     def post(self, request):
         serializer = InitializePaymentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -33,6 +37,9 @@ class VerifyPaymentView(APIView):
     """
     permission_classes = [AllowAny]
 
+    @extend_schema(
+        summary='Verify payment',
+        description='Check a transaction\'s outcome with Paystack and update the order accordingly. Open to everyone.')
     def post(self, request):
         serializer = VerifyPaymentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
