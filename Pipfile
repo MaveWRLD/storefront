@@ -15,6 +15,7 @@ psycopg2-binary = "*"
 django-money = "*"
 pillow = "*"
 drf-spectacular = "*"
+django-cors-headers = "*"
 
 [dev-packages]
 autopep8 = "*"
