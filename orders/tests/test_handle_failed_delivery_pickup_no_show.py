@@ -5,6 +5,7 @@ import pytest
 
 from catalog.models import Collection, Product, Variant
 from orders.models import Order, OrderItem
+from orders.serializers import UpdateOrderSerializer
 
 User = get_user_model()
 
@@ -108,3 +109,40 @@ class TestHandleFailedDeliveryPickupNoShow:
 
         assert response.status_code in (
             status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+
+    def test_cancelling_a_paid_order_credits_inventory_not_allocated(self, admin_client, make_order, variant):
+        """US-33: a paid order already had `inventory` decremented and
+        `allocated` released at payment success (US-31) — cancelling it
+        credits `inventory` back and leaves `allocated` alone."""
+        order = make_order(Order.FULFILLMENT_DELIVERY, Order.STATUS_DELIVERY_FAILED, quantity=2)
+
+        admin_client.patch(f'/store-admin/orders/{order.id}/', {'status': Order.STATUS_CANCELLED})
+
+        variant.refresh_from_db()
+        assert variant.inventory == 2
+        assert variant.allocated == 0
+
+    def test_cancelling_an_unpaid_order_releases_allocated_not_inventory(self, variant):
+        """US-33: an order never paid for was only ever held in
+        `allocated` (checkout, US-30, never touches `inventory`) — cancel
+        must release `allocated` instead. `UpdateOrderSerializer.update()`
+        is exercised directly since the only real endpoint
+        (`OrderAdminViewSet`) requires `payment_status == COMPLETE` before
+        any status transition, so this branch is unreachable through the
+        API today but still needs to hold if that guard ever loosens."""
+        Variant.objects.filter(pk=variant.pk).update(allocated=2)
+        order = Order.objects.create(
+            fulfillment_method=Order.FULFILLMENT_DELIVERY,
+            payment_status=Order.PAYMENT_STATUS_PENDING,
+            status=Order.STATUS_DELIVERY_FAILED,
+            guest_name='Guest', guest_email='guest@example.com',
+            guest_phone='0800000000',
+        )
+        OrderItem.objects.create(
+            order=order, variant=variant, quantity=2, unit_price=variant.unit_price)
+
+        UpdateOrderSerializer().update(order, {'status': Order.STATUS_CANCELLED})
+
+        variant.refresh_from_db()
+        assert variant.allocated == 0
+        assert variant.inventory == 0

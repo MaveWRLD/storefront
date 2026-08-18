@@ -32,3 +32,7 @@ class Notification(models.Model):
 
     class Meta:
         ordering = ['-sent_at']
+        indexes = [
+            models.Index(fields=['order', '-sent_at']),
+            models.Index(fields=['event_type']),
+        ]

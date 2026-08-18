@@ -19,11 +19,11 @@ def order():
 
 def pay_successfully(order_id):
     client = APIClient()
-    with patch('payment.serializers.initialize_transaction') as init_mock:
+    with patch('payment.gateways.paystack.PaystackGateway.initialize_transaction') as init_mock:
         init_mock.return_value = {'authorization_url': 'https://paystack.test/pay'}
         reference = client.post(
             '/store-front/payments/initialize/', {'order_id': order_id}).data['reference']
-    with patch('payment.serializers.verify_transaction') as verify_mock:
+    with patch('payment.gateways.paystack.PaystackGateway.verify_transaction') as verify_mock:
         verify_mock.return_value = {'status': 'success'}
         client.post('/store-front/payments/verify/', {'reference': reference})
 

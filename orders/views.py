@@ -92,3 +92,10 @@ class OrderAdminViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin,
         if self.request.method == 'PATCH':
             return UpdateOrderSerializer
         return OrderSerializer
+
+    @extend_schema(
+        summary='Total orders count',
+        description='Return total number of orders in system. For dashboard. Staff-only.')
+    @action(detail=False, methods=['get'])
+    def count(self, request):
+        return Response({'count': Order.objects.count()})

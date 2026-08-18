@@ -9,3 +9,14 @@ class LikedItem(models.Model):
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
     object_id = models.PositiveIntegerField()
     content_object = GenericForeignKey()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['content_type', 'object_id']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'content_type', 'object_id'],
+                name='unique_like_per_user_object',
+            ),
+        ]

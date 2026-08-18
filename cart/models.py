@@ -12,6 +12,11 @@ class Cart(models.Model):
     # Saleor's Checkout.last_change (checkout/models.py).
     last_activity = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['last_activity']),
+        ]
+
 
 class CartItem(models.Model):
     cart = models.ForeignKey(

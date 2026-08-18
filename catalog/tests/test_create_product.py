@@ -23,10 +23,8 @@ def collection():
 def product_payload(collection, **overrides):
     payload = dict(
         title='New Shirt',
-        slug='new-shirt',
         description='A shirt',
         collection=collection.id,
-        variants=[{'sku': 'new-shirt', 'unit_price': 1500, 'inventory': 5}],
     )
     payload.update(overrides)
     return payload
@@ -47,13 +45,14 @@ class TestCreateProduct:
             '/store-admin/products/', product_payload(collection), format='json')
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_admin_creates_product_with_name_and_price_appears_available(self, admin_client, collection):
+    def test_admin_creates_product_without_variants(self, admin_client, collection):
         response = admin_client.post(
             '/store-admin/products/', product_payload(collection), format='json')
 
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data['is_available'] is True
-        assert response.data['variants'][0]['sku'] == 'new-shirt'
+        assert response.data['variants'] == []
+        assert response.data['slug'] == 'new-shirt'
         product = Product.objects.get(pk=response.data['id'])
         assert product.status == ProductStatus.PUBLISHED
 
@@ -73,21 +72,34 @@ class TestCreateProduct:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert 'title' in response.data
 
-    def test_missing_price_returns_400(self, admin_client, collection):
-        payload = product_payload(collection)
-        del payload['variants'][0]['unit_price']
+    def test_variants_in_product_payload_are_ignored(self, admin_client, collection):
+        # Variants are strictly a sub-resource now (products/{id}/variants/)
+        # — a product must exist (and its axes, if any) before any variant
+        # can be added, so the product payload can't create them at all.
+        payload = product_payload(
+            collection,
+            variants=[{'sku': 'new-shirt', 'unit_price': 1500, 'inventory': 5}])
         response = admin_client.post('/store-admin/products/', payload, format='json')
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'unit_price' in response.data['variants'][0]
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['variants'] == []
+        product = Product.objects.get(pk=response.data['id'])
+        assert product.variants.count() == 0
 
-    def test_missing_variants_returns_400(self, admin_client, collection):
-        payload = product_payload(collection)
-        del payload['variants']
-        response = admin_client.post('/store-admin/products/', payload, format='json')
+    def test_admin_adds_variant_via_sub_resource_after_product_created(self, admin_client, collection):
+        create_response = admin_client.post(
+            '/store-admin/products/', product_payload(collection), format='json')
+        product_id = create_response.data['id']
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'variants' in response.data
+        response = admin_client.post(
+            f'/store-admin/products/{product_id}/variants/',
+            {'sku': 'new-shirt', 'unit_price': 1500, 'inventory': 5},
+            format='json')
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data['sku'] == 'new-shirt'
+        product = Product.objects.get(pk=product_id)
+        assert product.variants.count() == 1
 
     def test_admin_can_attach_an_image_to_a_product(self, admin_client, collection):
         create_response = admin_client.post(

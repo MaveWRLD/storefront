@@ -35,7 +35,7 @@ class Product(models.Model):
     fields. Price and stock moved to Variant (a product can have more than
     one), matching the diagram's Product 1-->0..* Variant edge."""
     title = models.CharField(max_length=255)
-    slug = models.SlugField()
+    slug = models.SlugField(unique=True)
     description = models.TextField(null=True, blank=True)
     status = models.CharField(
         max_length=9,
@@ -61,6 +61,11 @@ class Product(models.Model):
 
     class Meta:
         ordering = ['title']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['collection', 'status']),
+            models.Index(fields=['-last_update']),
+        ]
 
 
 class Variant(models.Model):
@@ -85,16 +90,36 @@ class Variant(models.Model):
     track_inventory = models.BooleanField(default=True)
     inventory = models.IntegerField(
         default=0, validators=[MinValueValidator(0)])
+    allocated = models.IntegerField(
+        default=0, validators=[MinValueValidator(0)])
+
+    @property
+    def available(self):
+        """Business Rule (Warehouse): 'Stock decrements only on payment
+        success, not at checkout' (US-32). Checkout allocates instead of
+        decrementing `inventory`, so everywhere that needs to know
+        available-to-sell stock must read `inventory - allocated`, not raw
+        `inventory`. `None` (unlimited) when inventory isn't tracked."""
+        if not self.track_inventory:
+            return None
+        return self.inventory - self.allocated
 
     @property
     def in_stock(self):
-        return not self.track_inventory or self.inventory > 0
+        return not self.track_inventory or self.available > 0
 
     def __str__(self) -> str:
         return self.sku
 
     class Meta:
         ordering = ['id']
+        indexes = [
+            models.Index(
+                fields=['track_inventory', 'inventory', 'allocated'],
+                condition=models.Q(track_inventory=True),
+                name='variant_in_stock_idx',
+            ),
+        ]
 
 
 class ProductAxis(models.Model):
@@ -149,3 +174,8 @@ class Review(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)])
     description = models.TextField()
     date = models.DateField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['product', '-date']),
+        ]

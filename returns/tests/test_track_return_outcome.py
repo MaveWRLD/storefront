@@ -68,7 +68,7 @@ class TestTrackReturnOutcome:
     to customer, no refund; approved: Paystack refund'."""
 
     def test_admin_approving_a_return_issues_a_paystack_refund(self, admin_client, pending_return):
-        with patch('returns.serializers.refund_transaction') as mocked:
+        with patch('payment.gateways.paystack.PaystackGateway.refund_transaction') as mocked:
             mocked.return_value = {'status': 'success'}
             response = admin_client.patch(
                 f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
@@ -80,7 +80,7 @@ class TestTrackReturnOutcome:
         assert pending_return.status == Return.STATUS_APPROVED
 
     def test_admin_rejecting_a_return_requires_a_reason_and_issues_no_refund(self, admin_client, pending_return):
-        with patch('returns.serializers.refund_transaction') as mocked:
+        with patch('payment.gateways.paystack.PaystackGateway.refund_transaction') as mocked:
             response = admin_client.patch(
                 f'/store-admin/returns/{pending_return.id}/',
                 {'action': 'reject', 'reason': 'Item shows signs of wear'})
@@ -110,7 +110,7 @@ class TestTrackReturnOutcome:
         assert pending_return.status == Return.STATUS_PENDING_REVIEW
 
     def test_cannot_review_a_return_that_was_already_reviewed(self, admin_client, pending_return):
-        with patch('returns.serializers.refund_transaction'):
+        with patch('payment.gateways.paystack.PaystackGateway.refund_transaction'):
             admin_client.patch(
                 f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
 
@@ -122,7 +122,7 @@ class TestTrackReturnOutcome:
 
     def test_customer_can_track_their_return_outcome(self, customer_and_client, pending_return):
         _, client = customer_and_client
-        with patch('returns.serializers.refund_transaction'):
+        with patch('payment.gateways.paystack.PaystackGateway.refund_transaction'):
             admin = APIClient()
             admin.force_authenticate(user=User(is_staff=True))
             admin.patch(f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
@@ -148,7 +148,7 @@ class TestTrackReturnOutcome:
 def test_return_decision_notifies_customer(admin_client, pending_return):
     from notifications.models import Notification
 
-    with patch('returns.serializers.refund_transaction'):
+    with patch('payment.gateways.paystack.PaystackGateway.refund_transaction'):
         admin_client.patch(
             f'/store-admin/returns/{pending_return.id}/', {'action': 'approve'})
 
