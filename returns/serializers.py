@@ -4,7 +4,7 @@ from rest_framework import serializers
 from notifications.models import Notification
 from notifications.services import notify
 from orders.models import Order, OrderItem
-from payment.gateway import PaystackError, refund_transaction
+from payment.gateways import PaymentGatewayError, get_gateway
 from payment.models import Payment
 from .models import Return
 
@@ -126,9 +126,10 @@ class ReviewReturnSerializer(serializers.Serializer):
     def save(self, **kwargs):
         return_request = self.instance
         if self.validated_data['action'] == self.ACTION_APPROVE:
+            payment = self.validated_data['payment']
             try:
-                refund_transaction(self.validated_data['payment'].reference)
-            except PaystackError as e:
+                get_gateway(payment.gateway).refund_transaction(payment.reference)
+            except PaymentGatewayError as e:
                 raise serializers.ValidationError(str(e))
             return_request.status = Return.STATUS_APPROVED
             message = 'Your return was approved and a refund has been issued.'

@@ -66,8 +66,8 @@ class AddCartItemSerializer(serializers.ModelSerializer):
         ).values_list('quantity', flat=True).first() or 0
 
         if variant.track_inventory and (
-                variant.inventory <= 0
-                or already_in_cart + data['quantity'] > variant.inventory):
+                variant.available <= 0
+                or already_in_cart + data['quantity'] > variant.available):
             raise serializers.ValidationError(
                 'This product does not have enough stock available.')
         return data

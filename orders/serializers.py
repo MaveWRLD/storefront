@@ -1,6 +1,7 @@
 from django.db import models, transaction
 from rest_framework import serializers
 from cart.models import Cart, CartItem
+from catalog.models import Variant
 from catalog.serializers import SimpleVariantSerializer
 from customers.models import Customer
 from notifications.models import Notification
@@ -157,11 +158,23 @@ class UpdateOrderSerializer(serializers.ModelSerializer):
         if order.status == Order.STATUS_CANCELLED:
             # Business Rule (Shipping): 'Failed delivery triggers reschedule,
             # not auto-cancel' — the give-up path, US-25: return each line's
-            # quantity to Variant.inventory (the Warehouse stand-in) so an
-            # abandoned order doesn't just lose that stock.
+            # stock so an abandoned order doesn't just lose it.
+            #
+            # Business Rule (Warehouse): 'Stock decrements only on payment
+            # success, not at checkout' (US-33) — branch on payment_status:
+            # a paid order already had `inventory` physically decremented
+            # (and `allocated` released) at payment success (US-31), so
+            # crediting `inventory` back is correct and `allocated` needs no
+            # further change. An unpaid order never touched `inventory` —
+            # its stock was only ever held in `allocated`, so that's what
+            # must be released instead.
             for item in order.items.select_related('variant'):
-                item.variant.inventory = models.F('inventory') + item.quantity
-                item.variant.save(update_fields=['inventory'])
+                if order.payment_status == Order.PAYMENT_STATUS_COMPLETE:
+                    Variant.objects.filter(pk=item.variant_id).update(
+                        inventory=models.F('inventory') + item.quantity)
+                else:
+                    Variant.objects.filter(pk=item.variant_id).update(
+                        allocated=models.F('allocated') - item.quantity)
 
         notification = _MILESTONE_NOTIFICATIONS.get(order.status)
         if notification is not None:
@@ -214,7 +227,7 @@ class CreateOrderSerializer(serializers.Serializer):
         available, unavailable = [], []
         for item in cart_items:
             variant = item.variant
-            in_stock = not variant.track_inventory or variant.inventory >= item.quantity
+            in_stock = not variant.track_inventory or variant.available >= item.quantity
             if variant.product.is_available and in_stock:
                 available.append(item)
             else:
@@ -248,14 +261,38 @@ class CreateOrderSerializer(serializers.Serializer):
             available_items = self.validated_data['_available_items']
             unavailable_items = self.validated_data['_unavailable_items']
 
-            order_items = [
-                OrderItem(
+            # Business Rule (Warehouse): 'Stock decrements only on payment
+            # success, not at checkout' (US-30). validate() already
+            # re-checked stock, but unlocked — lock the candidate variants
+            # and recheck under the lock to close the checkout race two
+            # concurrent checkouts on the last unit could otherwise both
+            # pass validate() and both reach here. Only `allocated` is
+            # bumped; `inventory` is untouched until payment succeeds.
+            locked_variants = {
+                v.pk: v for v in Variant.objects.select_for_update().filter(
+                    pk__in=[item.variant_id for item in available_items]
+                ).order_by('pk')
+            }
+
+            order_items = []
+            for item in available_items:
+                variant = locked_variants[item.variant_id]
+                if variant.track_inventory and variant.available < item.quantity:
+                    unavailable_items.append(item)
+                    continue
+                order_items.append(OrderItem(
                     order=order,
                     variant=item.variant,
                     unit_price=item.variant.unit_price,
-                    quantity=item.quantity
-                ) for item in available_items
-            ]
+                    quantity=item.quantity,
+                ))
+                Variant.objects.filter(pk=variant.pk).update(
+                    allocated=models.F('allocated') + item.quantity)
+
+            if not order_items:
+                raise serializers.ValidationError(
+                    'None of the items in your cart are currently available.')
+
             OrderItem.objects.bulk_create(order_items)
 
             Cart.objects.filter(pk=self.validated_data['cart_id']).delete()

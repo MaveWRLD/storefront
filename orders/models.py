@@ -108,6 +108,13 @@ class Order(models.Model):
                 name='order_has_customer_or_guest_contact',
             )
         ]
+        indexes = [
+            models.Index(fields=['customer', '-placed_at']),
+            models.Index(fields=['status']),
+            models.Index(fields=['payment_status']),
+            models.Index(fields=['fulfillment_method']),
+            models.Index(fields=['guest_email']),
+        ]
 
 
 class OrderItem(models.Model):

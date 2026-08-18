@@ -36,6 +36,9 @@ class Customer(models.Model):
         permissions = [
             ('view_history', 'Can view history')
         ]
+        indexes = [
+            models.Index(fields=['membership']),
+        ]
 
 
 class Address(models.Model):

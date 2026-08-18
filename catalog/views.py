@@ -9,10 +9,10 @@ from rest_framework import status
 from core.pagination import DefaultPagination
 from customers.models import Customer
 from .filters import ProductFilter
-from .models import Collection, Product, ProductImage, Review
+from .models import Collection, Product, ProductImage, Review, Variant
 from .serializers import (
     CollectionSerializer, ProductImageSerializer, ProductSerializer,
-    ReviewSerializer,
+    ReviewSerializer, VariantSerializer,
 )
 
 
@@ -183,6 +183,40 @@ class ProductImageAdminViewSet(ModelViewSet):
 
     def get_queryset(self):
         return ProductImage.objects.filter(product_id=self.kwargs['product_pk'])
+
+    def get_serializer_context(self):
+        return {'product_id': self.kwargs['product_pk']}
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary='List product variants (admin)',
+        description="List a product's variants. Staff-only."),
+    retrieve=extend_schema(
+        summary='Get product variant (admin)',
+        description='Retrieve a single variant by id. Staff-only.'),
+    create=extend_schema(
+        summary='Add product variant',
+        description='Add a new variant (sku/price/inventory) to a product, outside the product create/update payload. Staff-only.'),
+    update=extend_schema(
+        summary='Replace product variant',
+        description='Full update of a product variant. Staff-only.'),
+    partial_update=extend_schema(
+        summary='Update product variant',
+        description='Partial update of a product variant. Staff-only.'),
+    destroy=extend_schema(
+        summary='Delete product variant',
+        description='Delete a product variant. Staff-only.'),
+)
+class VariantAdminViewSet(ModelViewSet):
+    """Manages a product's variants (sku/price/inventory) outside the
+    product create/update payload — same admin-only surface as
+    ProductImageAdminViewSet."""
+    serializer_class = VariantSerializer
+    permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return Variant.objects.filter(product_id=self.kwargs['product_pk'])
 
     def get_serializer_context(self):
         return {'product_id': self.kwargs['product_pk']}

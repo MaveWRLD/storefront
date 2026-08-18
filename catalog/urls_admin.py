@@ -10,5 +10,7 @@ products_router = routers.NestedDefaultRouter(
     router, 'products', lookup='product')
 products_router.register('images', views.ProductImageAdminViewSet,
                          basename='admin-product-images')
+products_router.register('variants', views.VariantAdminViewSet,
+                         basename='admin-product-variants')
 
 urlpatterns = router.urls + products_router.urls

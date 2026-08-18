@@ -50,6 +50,28 @@ class TestCatalogVariantsAndAxes:
 
         assert made_to_order.in_stock is True
 
+    def test_available_is_inventory_minus_allocated(self, product):
+        variant = Variant.objects.create(
+            product=product, sku='test-shirt-s', unit_price=1000,
+            inventory=5, allocated=2)
+
+        assert variant.available == 3
+
+    def test_available_is_none_when_inventory_not_tracked(self, product):
+        made_to_order = Variant.objects.create(
+            product=product, sku='test-shirt-mto', unit_price=1000,
+            inventory=0, allocated=0, track_inventory=False)
+
+        assert made_to_order.available is None
+
+    def test_in_stock_is_false_once_fully_allocated_even_with_inventory_left(self, product):
+        variant = Variant.objects.create(
+            product=product, sku='test-shirt-s', unit_price=1000,
+            inventory=5, allocated=5)
+
+        assert variant.available == 0
+        assert variant.in_stock is False
+
     def test_product_can_have_axes_with_values(self, product):
         size_axis = ProductAxis.objects.create(
             product=product, name='Size', sort_order=0)

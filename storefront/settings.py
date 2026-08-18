@@ -81,10 +81,14 @@ INTERNAL_IPS = [
 # Bearer token (Authorization header). Add production frontend origin(s)
 # here once deployed — do not use CORS_ALLOW_ALL_ORIGINS in production.
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',   # Vite default
+    'http://localhost:5173',
+    'http://localhost:4173',   # Vite default    # Vite default
     'http://localhost:3000',   # CRA/Next default
 ]
 CORS_ALLOW_CREDENTIALS = True
+# Cache preflight (OPTIONS) responses in the browser so repeat requests
+# skip the extra round trip. 86400s = 24h (Chrome's own cap on this value).
+CORS_PREFLIGHT_MAX_AGE = 86400
 
 ROOT_URLCONF = 'storefront.urls'
 

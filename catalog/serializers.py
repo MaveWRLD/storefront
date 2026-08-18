@@ -1,4 +1,5 @@
 from decimal import Decimal
+from django.utils.text import slugify
 from rest_framework import serializers
 from orders.models import Order, OrderItem
 from .models import (
@@ -46,6 +47,13 @@ class VariantSerializer(serializers.ModelSerializer):
     def get_price_with_tax(self, variant: Variant):
         return variant.unit_price.amount * Decimal(1.1)
 
+    def create(self, validated_data):
+        # Only hit when used standalone (VariantAdminViewSet) — the nested
+        # product-create/update flow creates Variant rows itself and never
+        # calls this.
+        product_id = self.context['product_id']
+        return Variant.objects.create(product_id=product_id, **validated_data)
+
 
 class SimpleVariantSerializer(serializers.ModelSerializer):
     """Used where an order/cart line just needs to show what was bought —
@@ -84,15 +92,29 @@ class ProductSerializer(serializers.ModelSerializer):
     is_available = serializers.BooleanField(read_only=True)
     in_stock = serializers.BooleanField(read_only=True)
     images = ProductImageSerializer(many=True, read_only=True)
-    variants = VariantSerializer(many=True)
+    # Variants are display-only here — creation/update goes through the
+    # products/{id}/variants/ sub-resource only (product+axes must exist
+    # first), never through this payload.
+    variants = VariantSerializer(many=True, read_only=True)
     axes = ProductAxisSerializer(many=True, required=False)
+    # Auto-generated from title (like admin's prepopulated_fields) — never
+    # accepted from the client.
+    slug = serializers.SlugField(read_only=True)
+
+    def _unique_slug_from(self, title, instance=None):
+        base_slug = slugify(title)
+        slug = base_slug
+        qs = Product.objects.exclude(pk=instance.pk) if instance else Product.objects.all()
+        suffix = 1
+        while qs.filter(slug=slug).exists():
+            suffix += 1
+            slug = f'{base_slug}-{suffix}'
+        return slug
 
     def create(self, validated_data):
-        variants_data = validated_data.pop('variants')
         axes_data = validated_data.pop('axes', [])
+        validated_data['slug'] = self._unique_slug_from(validated_data['title'])
         product = Product.objects.create(**validated_data)
-        for variant_data in variants_data:
-            Variant.objects.create(product=product, **variant_data)
         for axis_data in axes_data:
             values_data = axis_data.pop('values', [])
             axis = ProductAxis.objects.create(product=product, **axis_data)
@@ -101,11 +123,14 @@ class ProductSerializer(serializers.ModelSerializer):
         return product
 
     def update(self, instance, validated_data):
-        # Variants/axes aren't re-written on a plain product update (US-21
-        # is a Catalog-field edit, not a variant-management story) — pop and
-        # leave the existing rows alone.
-        validated_data.pop('variants', None)
+        # Axes aren't re-written on a plain product update (US-21 is a
+        # Catalog-field edit, not an axis-management story) — pop and
+        # leave the existing rows alone. Variants are read_only here, so
+        # they're never even in validated_data.
         validated_data.pop('axes', None)
+        new_title = validated_data.get('title')
+        if new_title and new_title != instance.title:
+            validated_data['slug'] = self._unique_slug_from(new_title, instance=instance)
         return super().update(instance, validated_data)
 
 

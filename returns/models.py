@@ -28,3 +28,9 @@ class Return(models.Model):
     # approval and while still pending.
     resolution_reason = models.CharField(max_length=255, blank=True, default='')
     reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['-requested_at']),
+        ]
