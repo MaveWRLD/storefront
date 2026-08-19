@@ -40,7 +40,7 @@ class OrderViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, Generic
         user = request.user if request.user.is_authenticated else None
         serializer = CreateOrderSerializer(
             data=request.data,
-            context={'user': user})
+            context={'user': user, 'request': request})
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
         serializer = OrderSerializer(order)

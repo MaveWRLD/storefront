@@ -4,6 +4,7 @@ import pytest
 
 from catalog.models import Collection, Product, ProductStatus, Variant
 from cart.models import Cart, CartItem
+from cart.test_helpers import bind_client_to_cart
 from orders.models import Order
 
 
@@ -30,10 +31,10 @@ def cart():
     return Cart.objects.create()
 
 
-def place_order(cart_id):
+def place_order(cart):
     client = APIClient()
+    bind_client_to_cart(client, cart)
     return client.post('/store-front/orders/', {
-        'cart_id': str(cart_id),
         'fulfillment_method': Order.FULFILLMENT_DELIVERY,
         'guest_name': 'Guest',
         'guest_email': 'guest@example.com',
@@ -46,7 +47,7 @@ class TestStockRevalidationAtCheckout:
         product = make_product(inventory=5)
         CartItem.objects.create(cart=cart, variant=product.variant, quantity=2)
 
-        response = place_order(cart.id)
+        response = place_order(cart)
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['items']) == 1
@@ -60,7 +61,7 @@ class TestStockRevalidationAtCheckout:
         CartItem.objects.create(cart=cart, variant=available.variant, quantity=1)
         CartItem.objects.create(cart=cart, variant=out_of_stock.variant, quantity=1)
 
-        response = place_order(cart.id)
+        response = place_order(cart)
 
         assert response.status_code == status.HTTP_200_OK
         order_product_titles = [i['variant']['product']['title']
@@ -77,7 +78,7 @@ class TestStockRevalidationAtCheckout:
         CartItem.objects.create(cart=cart, variant=available.variant, quantity=1)
         CartItem.objects.create(cart=cart, variant=draft.variant, quantity=1)
 
-        response = place_order(cart.id)
+        response = place_order(cart)
 
         assert response.status_code == status.HTTP_200_OK
         order_product_titles = [i['variant']['product']['title']
@@ -89,7 +90,7 @@ class TestStockRevalidationAtCheckout:
         product = make_product(inventory=1)
         CartItem.objects.create(cart=cart, variant=product.variant, quantity=3)
 
-        response = place_order(cart.id)
+        response = place_order(cart)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -97,7 +98,7 @@ class TestStockRevalidationAtCheckout:
         product = make_product(inventory=0)
         CartItem.objects.create(cart=cart, variant=product.variant, quantity=1)
 
-        response = place_order(cart.id)
+        response = place_order(cart)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert Order.objects.count() == 0

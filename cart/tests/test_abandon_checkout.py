@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from cart.models import Cart, CartItem
+from cart.test_helpers import bind_client_to_cart
 from catalog.models import Collection, Product, Variant
 
 
@@ -32,7 +33,8 @@ class TestAbandonCheckout:
         CartItem.objects.create(cart=cart, variant=variant, quantity=1)
 
         client = APIClient()
-        response = client.get(f'/store-front/carts/{cart.id}/')
+        bind_client_to_cart(client, cart)
+        response = client.get('/store-front/cart/')
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data['items']) == 1
@@ -54,8 +56,9 @@ class TestAbandonCheckout:
         stale_activity = Cart.objects.get(pk=cart.pk).last_activity
 
         client = APIClient()
+        bind_client_to_cart(client, cart)
         response = client.post(
-            f'/store-front/carts/{cart.id}/items/',
+            '/store-front/cart/items/',
             {'variant_id': variant.id, 'quantity': 1})
 
         assert response.status_code == status.HTTP_201_CREATED

@@ -37,6 +37,8 @@ def paid_order(variant, quantity=1, placed_at=None):
     )
     OrderItem.objects.create(
         order=order, variant=variant, quantity=quantity, unit_price=variant.unit_price)
+    order.subtotal = quantity * variant.unit_price
+    order.save(update_fields=['subtotal'])
     if placed_at is not None:
         Order.objects.filter(pk=order.pk).update(placed_at=placed_at)
     return order

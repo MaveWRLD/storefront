@@ -203,6 +203,12 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1)
 }
 
+# Guest cart identity: cart_id is the only thing the session carries, so
+# storing it in the signed cookie itself (rather than the django_session
+# table) skips a DB round-trip on every cart-touching request. Signed, not
+# encrypted — never put anything sensitive in request.session.
+SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
+
 # django-money
 DEFAULT_CURRENCY = 'USD'
 CURRENCIES = ('USD',)

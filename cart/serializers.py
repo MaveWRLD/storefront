@@ -60,9 +60,9 @@ class AddCartItemSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'This product is not available for purchase.')
 
-        cart_id = self.context['cart_id']
+        cart = self.context['cart']
         already_in_cart = CartItem.objects.filter(
-            cart_id=cart_id, variant_id=variant.id
+            cart=cart, variant_id=variant.id
         ).values_list('quantity', flat=True).first() or 0
 
         if variant.track_inventory and (
@@ -73,23 +73,23 @@ class AddCartItemSerializer(serializers.ModelSerializer):
         return data
 
     def save(self, **kwargs):
-        cart_id = self.context['cart_id']
+        cart = self.context['cart']
         variant_id = self.validated_data['variant_id']
         quantity = self.validated_data['quantity']
 
         try:
             cart_item = CartItem.objects.get(
-                cart_id=cart_id, variant_id=variant_id)
+                cart=cart, variant_id=variant_id)
             cart_item.quantity += quantity
             cart_item.save()
             self.instance = cart_item
         except CartItem.DoesNotExist:
             self.instance = CartItem.objects.create(
-                cart_id=cart_id, **self.validated_data)
+                cart=cart, **self.validated_data)
 
         # Business Rule (Checkout): 'Abandoned checkout preserves the cart' —
         # touch the cart so its TTL clock (last_activity) resets on activity.
-        Cart.objects.filter(pk=cart_id).update(last_activity=timezone.now())
+        Cart.objects.filter(pk=cart.pk).update(last_activity=timezone.now())
 
         return self.instance
 
