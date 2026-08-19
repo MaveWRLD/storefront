@@ -1,11 +1,11 @@
-from rest_framework_nested import routers
+from rest_framework.routers import DefaultRouter
+from django.urls import path
 from . import views
 
-router = routers.DefaultRouter()
+router = DefaultRouter()
 router.include_root_view = False
-router.register('carts', views.CartViewSet)
+router.register('cart/items', views.CartItemViewSet, basename='cart-items')
 
-carts_router = routers.NestedDefaultRouter(router, 'carts', lookup='cart')
-carts_router.register('items', views.CartItemViewSet, basename='cart-items')
-
-urlpatterns = router.urls + carts_router.urls
+urlpatterns = [
+    path('cart/', views.CartView.as_view(), name='cart-detail'),
+] + router.urls

@@ -1,6 +1,9 @@
+from django.conf import settings
 from django.db import models, transaction
+from djmoney.money import Money
 from rest_framework import serializers
-from cart.models import Cart, CartItem
+from cart.models import CartItem
+from cart.services import CART_SESSION_KEY, get_current_cart
 from catalog.models import Variant
 from catalog.serializers import SimpleVariantSerializer
 from customers.models import Customer
@@ -42,7 +45,7 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = ['id', 'customer', 'guest_name', 'guest_email',
                   'fulfillment_method', 'placed_at', 'payment_status', 'status',
-                  'items', 'unavailable_items']
+                  'subtotal', 'items', 'unavailable_items']
 
     def get_unavailable_items(self, order):
         # Not persisted (US-09): the checkout-time stock re-check drops these
@@ -191,7 +194,6 @@ class CreateOrderSerializer(serializers.Serializer):
     account): an authenticated request resolves its Customer as before;
     an anonymous request must supply guest contact details instead.
     """
-    cart_id = serializers.UUIDField()
     fulfillment_method = serializers.ChoiceField(
         choices=Order.FULFILLMENT_METHOD_CHOICES)
     guest_name = serializers.CharField(required=False, allow_blank=True)
@@ -199,20 +201,20 @@ class CreateOrderSerializer(serializers.Serializer):
     guest_phone = serializers.CharField(
         required=False, allow_blank=True, max_length=32)
 
-    def validate_cart_id(self, cart_id):
-        if not Cart.objects.filter(pk=cart_id).exists():
-            raise serializers.ValidationError(
-                'No cart with the given ID was found.')
-        if CartItem.objects.filter(cart_id=cart_id).count() == 0:
-            raise serializers.ValidationError('The cart is empty.')
-        return cart_id
-
     def validate(self, data):
         user = self.context.get('user')
         if user is None or not user.is_authenticated:
             if not data.get('guest_name') or not data.get('guest_email'):
                 raise serializers.ValidationError(
                     'Guest checkout requires guest_name and guest_email.')
+
+        # The cart is never passed in by the client — it's resolved the same
+        # way cart/views.py resolves it: the authenticated user's cart, or
+        # the guest session's cart_id (cart/services.py).
+        cart = get_current_cart(self.context['request'])
+        if cart is None:
+            raise serializers.ValidationError(
+                'No cart with the given ID was found.')
 
         # Business Rule (Warehouse): 'Stock re-validated at checkout, not
         # just add-to-cart' (US-09). Adapted from Saleor's
@@ -223,7 +225,10 @@ class CreateOrderSerializer(serializers.Serializer):
         cart_items = list(
             CartItem.objects
             .select_related('variant__product')
-            .filter(cart_id=data['cart_id']))
+            .filter(cart=cart))
+        if not cart_items:
+            raise serializers.ValidationError('The cart is empty.')
+
         available, unavailable = [], []
         for item in cart_items:
             variant = item.variant
@@ -237,6 +242,7 @@ class CreateOrderSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'None of the items in your cart are currently available.')
 
+        data['_cart'] = cart
         data['_available_items'] = available
         data['_unavailable_items'] = unavailable
         return data
@@ -295,7 +301,18 @@ class CreateOrderSerializer(serializers.Serializer):
 
             OrderItem.objects.bulk_create(order_items)
 
-            Cart.objects.filter(pk=self.validated_data['cart_id']).delete()
+            order.subtotal = sum(
+                (item.quantity * item.unit_price for item in order_items),
+                start=Money(0, settings.DEFAULT_CURRENCY)
+            )
+            order.save(update_fields=['subtotal'])
+
+            cart = self.validated_data['_cart']
+            cart.delete()
+            # The cart's gone — drop the guest session's pointer to it too,
+            # same as cart/services.py.merge_cart_into_user does on login,
+            # so the next request doesn't chase a deleted cart id.
+            self.context['request'].session.pop(CART_SESSION_KEY, None)
 
             order_created.send_robust(self.__class__, order=order)
 

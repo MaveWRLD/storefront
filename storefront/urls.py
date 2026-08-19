@@ -24,6 +24,7 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 import debug_toolbar
+from core import views as core_views
 
 admin.site.site_header = 'Storefront Admin'
 admin.site.index_title = 'Admin'
@@ -34,7 +35,7 @@ def store_api_root(request, format=None):
     return Response({
         'products': reverse('products-list', request=request, format=format),
         'collections': reverse('collections-list', request=request, format=format),
-        'carts': reverse('cart-list', request=request, format=format),
+        'cart': reverse('cart-detail', request=request, format=format),
         'customers': reverse('customers-me', request=request, format=format),
         'orders': reverse('orders-list', request=request, format=format),
     })
@@ -58,6 +59,12 @@ urlpatterns = [
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
     path('auth/', include('djoser.urls')),
+    # Overrides djoser.urls.jwt's auth/jwt/create/ with a version that also
+    # merges the guest session's cart on login (core/views.py) — must come
+    # before the djoser.urls.jwt include below, which is only reached for
+    # jwt/refresh/, jwt/verify/, etc.
+    path('auth/jwt/create/', core_views.CartMergingTokenObtainPairView.as_view(),
+         name='jwt-create-with-cart-merge'),
     path('auth/', include('djoser.urls.jwt')),
     path('__debug__/', include(debug_toolbar.urls)),
 ]

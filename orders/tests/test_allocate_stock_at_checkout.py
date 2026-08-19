@@ -4,6 +4,7 @@ import pytest
 
 from catalog.models import Collection, Product, Variant
 from cart.models import Cart, CartItem
+from cart.test_helpers import bind_client_to_cart
 from orders.models import Order
 from orders.serializers import CreateOrderSerializer
 
@@ -31,10 +32,10 @@ def cart():
     return Cart.objects.create()
 
 
-def place_order(cart_id):
+def place_order(cart):
     client = APIClient()
+    bind_client_to_cart(client, cart)
     return client.post('/store-front/orders/', {
-        'cart_id': str(cart_id),
         'fulfillment_method': Order.FULFILLMENT_DELIVERY,
         'guest_name': 'Guest',
         'guest_email': 'guest@example.com',
@@ -52,7 +53,7 @@ class TestAllocateStockAtCheckout:
         product = make_product(inventory=5)
         CartItem.objects.create(cart=cart, variant=product.variant, quantity=2)
 
-        response = place_order(cart.id)
+        response = place_order(cart)
 
         assert response.status_code == status.HTTP_200_OK
         product.variant.refresh_from_db()
@@ -65,7 +66,7 @@ class TestAllocateStockAtCheckout:
         CartItem.objects.create(cart=cart, variant=first.variant, quantity=2)
         CartItem.objects.create(cart=cart, variant=second.variant, quantity=1)
 
-        response = place_order(cart.id)
+        response = place_order(cart)
 
         assert response.status_code == status.HTTP_200_OK
         first.variant.refresh_from_db()
@@ -76,11 +77,11 @@ class TestAllocateStockAtCheckout:
     def test_allocated_stock_is_no_longer_available_to_a_second_checkout(self, cart, make_product):
         product = make_product(inventory=1)
         CartItem.objects.create(cart=cart, variant=product.variant, quantity=1)
-        place_order(cart.id)
+        place_order(cart)
 
         other_cart = Cart.objects.create()
         CartItem.objects.create(cart=other_cart, variant=product.variant, quantity=1)
-        response = place_order(other_cart.id)
+        response = place_order(other_cart)
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         product.variant.refresh_from_db()
@@ -104,11 +105,14 @@ class TestAllocateStockAtCheckout:
             'guest_name': 'Guest',
             'guest_email': 'guest@example.com',
             'guest_phone': '',
-            'cart_id': cart.id,
+            '_cart': cart,
             '_available_items': [item],
             '_unavailable_items': [],
         }
-        serializer._context = {'user': None}
+        # save() only needs .session.pop(key, None) off the request — a
+        # plain dict stands in fine, no real HttpRequest required here.
+        serializer._context = {'user': None, 'request': type(
+            'FakeRequest', (), {'session': {}})()}
 
         with pytest.raises(serializers.ValidationError):
             serializer.save()

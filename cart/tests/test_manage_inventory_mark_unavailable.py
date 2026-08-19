@@ -45,7 +45,7 @@ class TestManageInventoryMarkUnavailable:
         product = make_product(inventory=0)
         client = APIClient()
         response = client.post(
-            f'/store-front/carts/{cart.id}/items/',
+            '/store-front/cart/items/',
             {'variant_id': product.variant.id, 'quantity': 1})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -58,7 +58,7 @@ class TestManageInventoryMarkUnavailable:
 
         client = APIClient()
         response = client.post(
-            f'/store-front/carts/{cart.id}/items/',
+            '/store-front/cart/items/',
             {'variant_id': product.variant.id, 'quantity': 1})
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
@@ -77,7 +77,7 @@ class TestManageInventoryMarkUnavailable:
 
         client = APIClient()
         response = client.post(
-            f'/store-front/carts/{cart.id}/items/',
+            '/store-front/cart/items/',
             {'variant_id': product.variant.id, 'quantity': 1})
         assert response.status_code == status.HTTP_201_CREATED
 
@@ -85,6 +85,6 @@ class TestManageInventoryMarkUnavailable:
         product = make_product(inventory=5, status=ProductStatus.PUBLISHED)
         client = APIClient()
         response = client.post(
-            f'/store-front/carts/{cart.id}/items/',
+            '/store-front/cart/items/',
             {'variant_id': product.variant.id, 'quantity': 1})
         assert response.status_code == status.HTTP_201_CREATED
