@@ -33,9 +33,12 @@ def make_order(variant):
             fulfillment_method=fulfillment_method,
             payment_status=Order.PAYMENT_STATUS_COMPLETE,
             status=order_status,
-            guest_name='Guest',
-            guest_email='guest@example.com',
-            guest_phone='0800000000',
+            shipping_address={
+        'recipient_name': 'Guest', 'email': 'guest@example.com',
+        'phone': '0800000000', 'street_address': '1 Test St',
+        'city': 'Accra', 'region': 'Greater Accra',
+        'coordinates': {'lat': 5.6, 'lng': -0.2},
+    },
         )
         OrderItem.objects.create(
             order=order, variant=variant, quantity=quantity,
@@ -135,8 +138,12 @@ class TestHandleFailedDeliveryPickupNoShow:
             fulfillment_method=Order.FULFILLMENT_DELIVERY,
             payment_status=Order.PAYMENT_STATUS_PENDING,
             status=Order.STATUS_DELIVERY_FAILED,
-            guest_name='Guest', guest_email='guest@example.com',
-            guest_phone='0800000000',
+            shipping_address={
+        'recipient_name': 'Guest', 'email': 'guest@example.com',
+        'phone': '0800000000', 'street_address': '1 Test St',
+        'city': 'Accra', 'region': 'Greater Accra',
+        'coordinates': {'lat': 5.6, 'lng': -0.2},
+    },
         )
         OrderItem.objects.create(
             order=order, variant=variant, quantity=2, unit_price=variant.unit_price)

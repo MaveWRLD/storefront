@@ -16,7 +16,7 @@ def order_matches_requester(order, user, email):
     if order.customer_id:
         return user is not None and user.is_authenticated \
             and order.customer.user_id == user.id
-    return bool(email) and email.lower() == order.guest_email.lower()
+    return bool(email) and email.lower() == order.get_email().lower()
 
 
 class CreateReturnSerializer(serializers.Serializer):

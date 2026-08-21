@@ -32,8 +32,12 @@ def paid_order(variant, quantity=1, placed_at=None):
         fulfillment_method=Order.FULFILLMENT_PICKUP,
         payment_status=Order.PAYMENT_STATUS_COMPLETE,
         status=Order.STATUS_COMPLETED,
-        guest_name='Guest', guest_email='guest@example.com',
-        guest_phone='0800000000',
+        shipping_address={
+        'recipient_name': 'Guest', 'email': 'guest@example.com',
+        'phone': '0800000000', 'street_address': '1 Test St',
+        'city': 'Accra', 'region': 'Greater Accra',
+        'coordinates': {'lat': 5.6, 'lng': -0.2},
+    },
     )
     OrderItem.objects.create(
         order=order, variant=variant, quantity=quantity, unit_price=variant.unit_price)
@@ -77,8 +81,12 @@ class TestViewReports:
     def test_unpaid_orders_excluded_from_reports(self, admin_client, variant):
         unpaid = Order.objects.create(
             fulfillment_method=Order.FULFILLMENT_PICKUP,
-            guest_name='Guest', guest_email='guest@example.com',
-            guest_phone='0800000000',
+            shipping_address={
+        'recipient_name': 'Guest', 'email': 'guest@example.com',
+        'phone': '0800000000', 'street_address': '1 Test St',
+        'city': 'Accra', 'region': 'Greater Accra',
+        'coordinates': {'lat': 5.6, 'lng': -0.2},
+    },
         )
         OrderItem.objects.create(
             order=unpaid, variant=variant, quantity=1, unit_price=variant.unit_price)

@@ -100,6 +100,12 @@ def confirm_payment(reference, transaction_data=None):
             payment.order, Notification.EVENT_ORDER_CONFIRMED,
             'Your order has been confirmed.')
 
+        # 004-shipping-integration: shipment booking is NOT triggered
+        # here. Staff physically package a CONFIRMED order first, then
+        # trigger booking themselves (shipping/views.py:CreatePickupView,
+        # store-admin/) — payment confirmation and courier pickup are
+        # separate real-world events, not one atomic step.
+
     return payment
 
 

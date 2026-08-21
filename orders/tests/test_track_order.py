@@ -11,9 +11,12 @@ from orders.models import Order
 def order():
     return Order.objects.create(
         fulfillment_method=Order.FULFILLMENT_DELIVERY,
-        guest_name='Guest',
-        guest_email='guest@example.com',
-        guest_phone='0800000000',
+        shipping_address={
+        'recipient_name': 'Guest', 'email': 'guest@example.com',
+        'phone': '0800000000', 'street_address': '1 Test St',
+        'city': 'Accra', 'region': 'Greater Accra',
+        'coordinates': {'lat': 5.6, 'lng': -0.2},
+    },
     )
 
 
@@ -33,7 +36,7 @@ class TestTrackOrder:
     def test_newly_placed_unpaid_order_has_no_stage_yet(self, order):
         client = APIClient()
         response = client.post('/store-front/orders/lookup/', {
-            'order_id': order.id, 'email': order.guest_email})
+            'order_id': order.id, 'email': order.get_email()})
         assert response.data['status'] == ''
 
     def test_order_moves_to_confirmed_once_payment_succeeds(self, order):
@@ -41,7 +44,7 @@ class TestTrackOrder:
 
         client = APIClient()
         response = client.post('/store-front/orders/lookup/', {
-            'order_id': order.id, 'email': order.guest_email})
+            'order_id': order.id, 'email': order.get_email()})
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data['status'] == Order.STATUS_CONFIRMED

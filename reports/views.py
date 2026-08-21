@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 from catalog.models import Variant
 from customers.models import Customer
 from orders.models import Order, OrderItem
+from reports.serializers import SalesReportSerializer
 
 DEFAULT_LOW_STOCK_THRESHOLD = 5
 DEFAULT_CHART_DAYS = 30
@@ -28,7 +29,8 @@ class SalesReportView(APIView):
 
     @extend_schema(
         summary='Sales report',
-        description='Return order count, total sales, and top products, optionally filtered by a start/end date range. Staff-only.')
+        description='Return order count, total sales, and top products, optionally filtered by a start/end date range. Staff-only.',
+        responses={200: SalesReportSerializer})
     def get(self, request):
         orders = Order.objects.filter(
             payment_status=Order.PAYMENT_STATUS_COMPLETE)
@@ -167,7 +169,8 @@ class RecentOrdersView(APIView):
                 'id': order.id,
                 'customer_name': (
                     f'{order.customer.user.first_name} {order.customer.user.last_name}'.strip()
-                    if order.customer_id else order.guest_name),
+                    if order.customer_id else
+                    (order.shipping_address or {}).get('recipient_name', '')),
                 'email': order.get_email(),
                 'placed_at': order.placed_at,
                 'total': order.get_total().amount,

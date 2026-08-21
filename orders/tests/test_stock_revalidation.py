@@ -36,9 +36,12 @@ def place_order(cart):
     bind_client_to_cart(client, cart)
     return client.post('/store-front/orders/', {
         'fulfillment_method': Order.FULFILLMENT_DELIVERY,
-        'guest_name': 'Guest',
-        'guest_email': 'guest@example.com',
-    })
+        'address': {
+            'recipient_name': 'Guest', 'email': 'guest@example.com', 'phone': '0800000000',
+            'street_address': '1 Test St', 'city': 'Accra', 'region': 'Greater Accra',
+            'coordinates': {'lat': 5.6, 'lng': -0.2},
+        },
+    }, format='json')
 
 
 @pytest.mark.django_db
