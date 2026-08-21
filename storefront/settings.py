@@ -27,7 +27,12 @@ SECRET_KEY = 'django-insecure-hs6j037urx6iav+7#10%-vu4l4f5@@-1_zo)oft4g7$vf2$jmp
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    h for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h
+]
+# ngrok's forwarding domain must be added here to test webhooks locally
+# (DEBUG's implicit localhost/127.0.0.1 allowance doesn't cover it) — e.g.
+# ALLOWED_HOSTS=abcd1234.ngrok-free.app
 
 
 # Application definition
@@ -51,6 +56,7 @@ INSTALLED_APPS = [
     'cart',
     'orders',
     'payment',
+    'shipping',
     'returns',
     'notifications',
     'reports',
@@ -180,6 +186,14 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # IP-keyed, matching the Spring reference (gap-analysis doc: 'No rate
+    # limiting anywhere'). Applied per-view via ScopedRateThrottle +
+    # throttle_scope, not blanket DEFAULT_THROTTLE_CLASSES — only
+    # login/register and guest order lookup need it.
+    'DEFAULT_THROTTLE_RATES': {
+        'auth': '5/min',
+        'order-lookup': '20/min',
+    },
 }
 
 SPECTACULAR_SETTINGS = {
@@ -230,3 +244,29 @@ PAYMENT_ABANDON_AFTER_MINUTES = 60
 # environment; blank locally just means initialize/verify calls will fail
 # until one is configured.
 PAYSTACK_SECRET_KEY = os.environ.get('PAYSTACK_SECRET_KEY', '')
+
+# Shipping (004-shipping-integration): Dawurobo (Ghana courier network) is
+# the only provider so far, wired up the same way Paystack is above. Blank
+# locally just means rate-quote/booking calls will fail until real
+# credentials are configured.
+DAWUROBO_API_KEY = os.environ.get('DAWUROBO_API_KEY', '')
+# Every outgoing request is HMAC-SHA256-signed (docs.dawurobo.com/docs/
+# authentication-and-signing). Confirmed against the real sandbox
+# (2026-08-19): Dawurobo issues one key used as both the API key and the
+# signing secret — DAWUROBO_SIGNING_SECRET is typically the same value
+# as DAWUROBO_API_KEY, not a separate `sk_...` secret as their docs text
+# implies. DAWUROBO_WEBHOOK_SECRET below is a third, unrelated secret,
+# used only to verify incoming webhook signatures.
+DAWUROBO_SIGNING_SECRET = os.environ.get('DAWUROBO_SIGNING_SECRET', '')
+DAWUROBO_WEBHOOK_SECRET = os.environ.get('DAWUROBO_WEBHOOK_SECRET', '')
+# Pickup coordinates omitted (None) below default to Dawurobo's own
+# central-Accra default (docs.dawurobo.com/docs/delivery-orders) — set
+# real warehouse coordinates here before going live.
+DAWUROBO_PICKUP_LAT = os.environ.get('DAWUROBO_PICKUP_LAT') or None
+DAWUROBO_PICKUP_LNG = os.environ.get('DAWUROBO_PICKUP_LNG') or None
+# REQUIRED by orders.create (no default from Dawurobo) — the warehouse's
+# own contact name/phone, not the customer's. Placeholders below WILL
+# cause real bookings to use fake contact info; replace before any
+# create_shipment call that isn't purely a sandbox smoke test.
+DAWUROBO_PICKUP_CONTACT_NAME = os.environ.get('DAWUROBO_PICKUP_CONTACT_NAME', 'Warehouse')
+DAWUROBO_PICKUP_CONTACT_PHONE = os.environ.get('DAWUROBO_PICKUP_CONTACT_PHONE', '+233000000000')

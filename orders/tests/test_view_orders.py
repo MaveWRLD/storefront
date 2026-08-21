@@ -21,9 +21,12 @@ def guest_order():
         fulfillment_method=Order.FULFILLMENT_PICKUP,
         payment_status=Order.PAYMENT_STATUS_COMPLETE,
         status=Order.STATUS_CONFIRMED,
-        guest_name='Guest One',
-        guest_email='guest1@example.com',
-        guest_phone='0800000000',
+        shipping_address={
+        'recipient_name': 'Guest One', 'email': 'guest1@example.com',
+        'phone': '0800000000', 'street_address': '1 Test St',
+        'city': 'Accra', 'region': 'Greater Accra',
+        'coordinates': {'lat': 5.6, 'lng': -0.2},
+    },
     )
 
 
@@ -31,9 +34,12 @@ def guest_order():
 def another_guest_order():
     return Order.objects.create(
         fulfillment_method=Order.FULFILLMENT_DELIVERY,
-        guest_name='Guest Two',
-        guest_email='guest2@example.com',
-        guest_phone='0800000001',
+        shipping_address={
+        'recipient_name': 'Guest Two', 'email': 'guest2@example.com',
+        'phone': '0800000001', 'street_address': '1 Test St',
+        'city': 'Accra', 'region': 'Greater Accra',
+        'coordinates': {'lat': 5.6, 'lng': -0.2},
+    },
     )
 
 

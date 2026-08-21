@@ -156,6 +156,12 @@ class ProductImage(models.Model):
     image = models.ImageField(upload_to='products')
     alt_text = models.CharField(max_length=255, blank=True)
     sort_order = models.PositiveIntegerField(default=0)
+    # Set only on an "image-bearing axis" (typically Color) — this photo
+    # belongs to that specific swatch and is swapped in when the shopper
+    # picks it. Null = an ordinary, axis-independent product photo.
+    axis_value = models.ForeignKey(
+        AxisValue, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='images')
 
     class Meta:
         ordering = ['sort_order', 'id']

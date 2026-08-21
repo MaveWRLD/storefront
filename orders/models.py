@@ -47,20 +47,38 @@ class Order(models.Model):
         max_length=8, choices=FULFILLMENT_METHOD_CHOICES)
     customer = models.ForeignKey(
         'customers.Customer', on_delete=models.PROTECT, null=True, blank=True)
-    guest_name = models.CharField(max_length=255, blank=True, default='')
-    guest_email = models.EmailField(blank=True, default='')
-    guest_phone = models.CharField(max_length=32, blank=True, default='')
     subtotal = MoneyField(
         max_digits=10, decimal_places=2, default_currency='USD',
         default=0)
+    # Set from the shipping rate quote selected at checkout (shipping app,
+    # 004-shipping-integration). Stays 0 for pickup-method orders.
+    shipping_cost = MoneyField(
+        max_digits=10, decimal_places=2, default_currency='USD',
+        default=0)
+    # The recipient contact + delivery address, persisted so booking
+    # (shipping/services.py:book_shipment_for_order) can re-send it once
+    # payment succeeds — Dawurobo re-prices at booking time rather than
+    # accepting a quote token, so there's nothing else to carry through
+    # but the address itself (shipping/serializers.py:AddressSerializer
+    # shape: recipient_name, email, phone, street_address, city, region,
+    # ghana_post_gps, coordinates).
+    #
+    # Also doubles as the ONLY guest-identity record on the order — there
+    # is no separate name/email/phone field. An authenticated customer's
+    # PICKUP order can leave this null (the account is the identity); a
+    # guest order of either fulfillment method cannot, since nothing else
+    # on Order identifies who placed it.
+    shipping_address = models.JSONField(null=True, blank=True)
 
     def get_email(self):
+        if self.shipping_address and self.shipping_address.get('email'):
+            return self.shipping_address['email']
         if self.customer_id:
             return self.customer.user.email
-        return self.guest_email
+        return ''
 
     def get_total(self):
-        return self.subtotal
+        return self.subtotal + self.shipping_cost
 
     class Meta:
         permissions = [
@@ -70,7 +88,7 @@ class Order(models.Model):
             models.CheckConstraint(
                 condition=(
                     models.Q(customer__isnull=False)
-                    | (~models.Q(guest_email='') & ~models.Q(guest_name=''))
+                    | models.Q(shipping_address__isnull=False)
                 ),
                 name='order_has_customer_or_guest_contact',
             )
@@ -80,7 +98,6 @@ class Order(models.Model):
             models.Index(fields=['status']),
             models.Index(fields=['payment_status']),
             models.Index(fields=['fulfillment_method']),
-            models.Index(fields=['guest_email']),
         ]
 
 

@@ -8,15 +8,35 @@ from .models import Cart, CartItem
 
 
 class CartItemSerializer(serializers.ModelSerializer):
+    STATUS_ACTIVE = 'ACTIVE'
+    STATUS_UNAVAILABLE = 'UNAVAILABLE'
+
     variant = SimpleVariantSerializer()
     total_price = serializers.SerializerMethodField()
+    price_changed = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     def get_total_price(self, cart_item: CartItem):
         return (cart_item.quantity * cart_item.variant.unit_price).amount
 
+    def get_price_changed(self, cart_item: CartItem):
+        # No baseline (line added before this field existed) — nothing
+        # to compare against, so report unchanged rather than guess.
+        if cart_item.price_at_add is None:
+            return False
+        return cart_item.price_at_add != cart_item.variant.unit_price
+
+    def get_status(self, cart_item: CartItem):
+        variant = cart_item.variant
+        in_stock = not variant.track_inventory or variant.available >= cart_item.quantity
+        if variant.product.is_available and in_stock:
+            return self.STATUS_ACTIVE
+        return self.STATUS_UNAVAILABLE
+
     class Meta:
         model = CartItem
-        fields = ['id', 'variant', 'quantity', 'total_price']
+        fields = ['id', 'variant', 'quantity', 'total_price',
+                  'price_changed', 'status']
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -84,8 +104,10 @@ class AddCartItemSerializer(serializers.ModelSerializer):
             cart_item.save()
             self.instance = cart_item
         except CartItem.DoesNotExist:
+            variant = Variant.objects.get(pk=variant_id)
             self.instance = CartItem.objects.create(
-                cart=cart, **self.validated_data)
+                cart=cart, price_at_add=variant.unit_price,
+                **self.validated_data)
 
         # Business Rule (Checkout): 'Abandoned checkout preserves the cart' —
         # touch the cart so its TTL clock (last_activity) resets on activity.
