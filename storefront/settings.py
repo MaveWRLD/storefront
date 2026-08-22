@@ -170,6 +170,20 @@ STATIC_URL = '/static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Product images (US-02): pluggable storage — 'local' (default, no creds
+# needed) or 'r2' (Cloudflare R2). See media_storage app.
+MEDIA_STORAGE_BACKEND = os.environ.get('MEDIA_STORAGE_BACKEND', 'local')
+
+if MEDIA_STORAGE_BACKEND == 'r2':
+    CLOUDFLARE_R2 = {
+        'BUCKET_NAME': os.environ['R2_BUCKET_NAME'],
+        'REGION': os.environ.get('R2_REGION', 'auto'),
+        'ENDPOINT': os.environ['R2_ENDPOINT'],
+        'ACCESS_KEY_ID': os.environ['R2_ACCESS_KEY_ID'],
+        'SECRET_ACCESS_KEY': os.environ['R2_SECRET_ACCESS_KEY'],
+        'PUBLIC_DOMAIN': os.environ['R2_PUBLIC_DOMAIN'],
+    }
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
