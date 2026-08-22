@@ -22,10 +22,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-hs6j037urx6iav+7#10%-vu4l4f5@@-1_zo)oft4g7$vf2$jmp'
+# Falls back to the old insecure dev key when unset — fine for local work,
+# must be overridden with a real secret in every deployed environment.
+SECRET_KEY = os.environ.get('SECRET_KEY') or \
+    'django-insecure-hs6j037urx6iav+7#10%-vu4l4f5@@-1_zo)oft4g7$vf2$jmp'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = [
     h for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h
@@ -124,11 +127,11 @@ WSGI_APPLICATION = 'storefront.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'storefront',
-        'HOST': 'localhost',
-        'PORT': '5433',
-        'USER': 'postgres',
-        'PASSWORD': 'testpass'
+        'NAME': os.environ.get('DB_NAME') or 'storefront',
+        'HOST': os.environ.get('DB_HOST') or 'localhost',
+        'PORT': os.environ.get('DB_PORT') or '5433',
+        'USER': os.environ.get('DB_USER') or 'postgres',
+        'PASSWORD': os.environ.get('DB_PASSWORD') or 'testpass',
     }
 }
 
