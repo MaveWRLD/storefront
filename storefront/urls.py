@@ -24,7 +24,6 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.routers import DefaultRouter
-import debug_toolbar
 from core import views as core_views
 
 # Overrides djoser.urls' own 'users' router registration (djoser/urls/base.py)
@@ -77,8 +76,9 @@ urlpatterns = [
     path('auth/jwt/create/', core_views.CartMergingTokenObtainPairView.as_view(),
          name='jwt-create-with-cart-merge'),
     path('auth/', include('djoser.urls.jwt')),
-    path('__debug__/', include(debug_toolbar.urls)),
 ]
 
 if settings.DEBUG:
+    import debug_toolbar
+    urlpatterns += [path('__debug__/', include(debug_toolbar.urls))]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

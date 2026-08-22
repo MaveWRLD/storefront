@@ -18,6 +18,8 @@ pillow = "*"
 drf-spectacular = "*"
 django-cors-headers = "*"
 python-magic = "*"
+gunicorn = "*"
+whitenoise = "*"
 
 [dev-packages]
 autopep8 = "*"
