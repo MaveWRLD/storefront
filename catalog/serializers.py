@@ -9,7 +9,7 @@ from orders.models import Order, OrderItem
 from media_storage.services.upload import (
     InvalidImageError, delete_image, upload_image, validate_image_bytes,
 )
-from media_storage.services.image_url_builder import build_url
+from media_storage.services.image_url_builder import DEFAULT_SRC_WIDTH, build_srcset, build_url
 from .models import (
     AxisValue, Product, ProductAxis, ProductImage, Collection, Review, Variant,
     VariantAxisValue,
@@ -37,10 +37,33 @@ class CollectionSerializer(serializers.ModelSerializer):
 
 class ProductImageSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(write_only=True)
+    axis_value = serializers.PrimaryKeyRelatedField(
+        queryset=AxisValue.objects.all(), required=False, allow_null=True,
+        write_only=True)
+    variant = serializers.PrimaryKeyRelatedField(
+        queryset=Variant.objects.all(), required=False, allow_null=True,
+        write_only=True)
+    position = serializers.IntegerField(source='sort_order', required=False)
+    object_key = serializers.CharField(source='image_key', read_only=True)
+    aspect_ratio = serializers.ReadOnlyField()
+    role = serializers.ReadOnlyField()
+    product_id = serializers.IntegerField(read_only=True)
+    variant_id = serializers.IntegerField(read_only=True)
+    axis_value_id = serializers.IntegerField(read_only=True)
+    src = serializers.SerializerMethodField()
+    srcset = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductImage
-        fields = ['id', 'image', 'alt_text', 'sort_order', 'axis_value', 'variant']
+        fields = ['id', 'image', 'alt_text', 'position', 'object_key',
+                  'aspect_ratio', 'role', 'product_id', 'variant_id',
+                  'axis_value_id', 'src', 'srcset', 'axis_value', 'variant']
+
+    def get_src(self, obj):
+        return build_url(obj.image_key, width=DEFAULT_SRC_WIDTH)
+
+    def get_srcset(self, obj):
+        return build_srcset(obj.image_key)
 
     def validate_image(self, image_file):
         data = image_file.read()
@@ -81,28 +104,27 @@ class ProductImageSerializer(serializers.ModelSerializer):
         product_id = self.context['product_id']
         image_file = validated_data.pop('image')
         variant = validated_data.get('variant')
-        image_key = upload_image(
+        result = upload_image(
             image_file, product_id=product_id,
             variant_id=variant.id if variant else None)
         return ProductImage.objects.create(
-            product_id=product_id, image_key=image_key, **validated_data)
+            product_id=product_id, image_key=result.key,
+            width=result.width, height=result.height, **validated_data)
 
     def update(self, instance, validated_data):
         image_file = validated_data.pop('image', None)
         if image_file is not None:
             old_key = instance.image_key
             variant = validated_data.get('variant', instance.variant)
-            instance.image_key = upload_image(
+            result = upload_image(
                 image_file, product_id=instance.product_id,
                 variant_id=variant.id if variant else None)
-            instance.save(update_fields=['image_key'])
+            instance.image_key = result.key
+            instance.width = result.width
+            instance.height = result.height
+            instance.save(update_fields=['image_key', 'width', 'height'])
             delete_image(old_key)
         return super().update(instance, validated_data)
-
-    def to_representation(self, instance):
-        ret = super().to_representation(instance)
-        ret['image'] = build_url(instance.image_key)
-        return ret
 
 
 class SimpleProductSerializer(serializers.ModelSerializer):
@@ -392,14 +414,16 @@ class CreateProductSerializer(serializers.Serializer):
 
             # bulk_create can't run per-row I/O — upload each file first
             # (sequentially; there's no async story here), then insert the
-            # rows in one bulk statement with the resulting keys.
-            image_keys = [
+            # rows in one bulk statement with the resulting keys/dimensions.
+            upload_results = [
                 upload_image(image, product_id=product.id)
                 for image in images
             ]
             ProductImage.objects.bulk_create([
-                ProductImage(product=product, image_key=key, sort_order=i)
-                for i, key in enumerate(image_keys)
+                ProductImage(product=product, image_key=result.key,
+                             width=result.width, height=result.height,
+                             sort_order=i)
+                for i, result in enumerate(upload_results)
             ])
             return product
 
