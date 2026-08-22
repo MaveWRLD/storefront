@@ -1,19 +1,23 @@
+from django.db import transaction
 from django.db.models.aggregates import Count
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, extend_schema_view
+from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework import status
+from django.shortcuts import get_object_or_404
 from core.pagination import DefaultPagination
 from customers.models import Customer
 from media_storage.services.upload import delete_image
 from .filters import ProductFilter
 from .models import Collection, Product, ProductImage, Review, Variant
 from .serializers import (
-    CollectionSerializer, ProductImageSerializer, ProductSerializer,
-    ReviewSerializer, VariantSerializer,
+    CollectionSerializer, CreateProductSerializer, ProductImageSerializer,
+    ProductSerializer, ReviewSerializer, VariantSerializer,
 )
 
 
@@ -23,10 +27,11 @@ from .serializers import (
         description='List published products. Open to everyone, supports search, filtering, and ordering.'),
     retrieve=extend_schema(
         summary='Get product details',
-        description='Retrieve a single product by id. Open to everyone.'),
+        description='Retrieve a single product by slug. Open to everyone.'),
 )
 class ProductViewSet(ReadOnlyModelViewSet):
-    """store-front/: read-only browsing, open to everyone."""
+    """store-front/: read-only browsing, open to everyone. Looked up by
+    slug (not id) — this is the customer-facing surface, admin keeps id."""
     # distinct(): filtering/ordering crosses the Product->Variant relation
     # now (price lives on Variant), which can otherwise duplicate a Product
     # row per matching variant.
@@ -38,6 +43,7 @@ class ProductViewSet(ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
     search_fields = ['title', 'description']
     ordering_fields = ['variants__unit_price', 'last_update']
+    lookup_field = 'slug'
 
     def get_serializer_context(self):
         return {'request': self.request}
@@ -52,7 +58,13 @@ class ProductViewSet(ReadOnlyModelViewSet):
         description='Retrieve a single product by id. Staff-only.'),
     create=extend_schema(
         summary='Create product',
-        description='Create a new product. Staff-only.'),
+        description=(
+            'Create a new product. Staff-only. Multipart request: a '
+            "'data' part (JSON: name, price {amount, currency}, axes "
+            '[{name, sortOrder, allowedValues: [{name, code}]}]) plus an '
+            "'images' part with one or more files."),
+        request={'multipart/form-data': CreateProductSerializer},
+        responses=ProductSerializer),
     update=extend_schema(
         summary='Replace product',
         description='Full update of a product. Staff-only.'),
@@ -74,8 +86,20 @@ class ProductAdminViewSet(ModelViewSet):
     search_fields = ['title', 'description']
     ordering_fields = ['variants__unit_price', 'last_update']
 
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CreateProductSerializer
+        return ProductSerializer
+
     def get_serializer_context(self):
         return {'request': self.request}
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        product = serializer.save()
+        output = ProductSerializer(product, context=self.get_serializer_context())
+        return Response(output.data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request, *args, **kwargs):
         if Product.objects.filter(
@@ -144,15 +168,19 @@ class CollectionAdminViewSet(ModelViewSet):
         description='Retrieve a single product image by id. Open to everyone.'),
 )
 class ProductImageViewSet(ReadOnlyModelViewSet):
-    """store-front/: read-only, open to everyone."""
+    """store-front/: read-only, open to everyone. Nested under the
+    slug-looked-up product (see ProductViewSet) — the nested router names
+    the url kwarg 'product_slug' to match, so resolve it to the real
+    numeric id before touching the FK."""
     serializer_class = ProductImageSerializer
     permission_classes = [AllowAny]
 
     def get_queryset(self):
-        return ProductImage.objects.filter(product_id=self.kwargs['product_pk'])
+        return ProductImage.objects.filter(product__slug=self.kwargs['product_slug'])
 
     def get_serializer_context(self):
-        return {'product_id': self.kwargs['product_pk']}
+        product = get_object_or_404(Product, slug=self.kwargs['product_slug'])
+        return {'product_id': product.id}
 
 
 @extend_schema_view(
@@ -226,6 +254,52 @@ class VariantAdminViewSet(ModelViewSet):
     def get_serializer_context(self):
         return {'product_id': self.kwargs['product_pk']}
 
+    @extend_schema(
+        summary='Batch-add product variants',
+        description=(
+            'Create multiple variants for a product in one request — a '
+            'JSON array, each item shaped like a single-variant create '
+            'payload (sku/unit_price/.../axis_value_ids). All-or-nothing: '
+            'any invalid entry, or any two entries (in this batch or '
+            'against existing variants) sharing sku or axis-value '
+            'combination, rejects the whole batch and creates nothing. '
+            'Staff-only.'),
+        request=VariantSerializer(many=True),
+        responses=VariantSerializer(many=True))
+    @action(detail=False, methods=['post'])
+    def batch(self, request, product_pk=None):
+        payload = request.data
+        if not isinstance(payload, list) or not payload:
+            return Response(
+                {'detail': 'Expected a non-empty list of variants.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        skus = [item.get('sku') if isinstance(item, dict) else None for item in payload]
+        dupe_skus = {sku for sku in skus if sku and skus.count(sku) > 1}
+        if dupe_skus:
+            return Response(
+                {'detail': f"Duplicate sku(s) within this batch: {', '.join(sorted(dupe_skus))}."},
+                status=status.HTTP_400_BAD_REQUEST)
+
+        context = self.get_serializer_context()
+        item_serializers = [VariantSerializer(data=item, context=context) for item in payload]
+        field_errors = [None if s.is_valid() else s.errors for s in item_serializers]
+        if any(field_errors):
+            return Response(field_errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            with transaction.atomic():
+                variants = [s.save() for s in item_serializers]
+        except ValidationError as exc:
+            # A business-rule check (completeness / no-duplicate-combination)
+            # failed on save — same shape of error as the single-create
+            # endpoint would give, just for whichever item triggered it.
+            return Response(exc.detail, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            VariantSerializer(variants, many=True, context=context).data,
+            status=status.HTTP_201_CREATED)
+
 
 @extend_schema_view(
     list=extend_schema(
@@ -251,15 +325,18 @@ class ReviewViewSet(ModelViewSet):
     """US-19: reviews are public to read, but only a customer who has
     actually purchased the product may post one (enforced in
     ReviewSerializer.validate). No admin-only action exists today — this
-    class is unchanged and lives under store-front/ only."""
+    class is unchanged and lives under store-front/ only. Nested under the
+    slug-looked-up product (see ProductViewSet) — the nested router names
+    the url kwarg 'product_slug' to match, so resolve to the real id first."""
     serializer_class = ReviewSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
-        return Review.objects.filter(product_id=self.kwargs['product_pk'])
+        return Review.objects.filter(product__slug=self.kwargs['product_slug'])
 
     def get_serializer_context(self):
-        context = {'product_id': self.kwargs['product_pk']}
+        product = get_object_or_404(Product, slug=self.kwargs['product_slug'])
+        context = {'product_id': product.id}
         if self.request.user.is_authenticated:
             context['customer'] = Customer.objects.filter(
                 user=self.request.user).first()
