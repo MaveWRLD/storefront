@@ -36,7 +36,10 @@ class TestUpdateProduct:
             f'/store-admin/products/{product.id}/', {'title': 'New Title'})
         assert response.status_code == status.HTTP_200_OK
 
-        storefront_view = APIClient().get(f'/store-front/products/{product.id}/')
+        # title change regenerates the slug (see ProductAdminSerializer.update),
+        # so re-fetch it rather than reuse the pre-update in-memory value.
+        product.refresh_from_db()
+        storefront_view = APIClient().get(f'/store-front/products/{product.slug}/')
         assert storefront_view.data['title'] == 'New Title'
 
     def test_admin_can_toggle_availability_via_update(self, admin_client, product):
