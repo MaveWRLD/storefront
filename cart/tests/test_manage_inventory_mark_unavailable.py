@@ -65,7 +65,7 @@ class TestManageInventoryMarkUnavailable:
     def test_unavailable_product_shown_as_unavailable_on_storefront(self, make_product):
         product = make_product(status=ProductStatus.ARCHIVED)
         client = APIClient()
-        response = client.get(f'/store-front/products/{product.id}/')
+        response = client.get(f'/store-front/products/{product.slug}/')
         assert response.data['is_available'] is False
 
     def test_replenished_and_republished_product_can_be_added_to_cart_again(self, admin_client, cart, make_product):

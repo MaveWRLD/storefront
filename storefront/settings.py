@@ -224,8 +224,8 @@ SIMPLE_JWT = {
 SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
 
 # django-money
-DEFAULT_CURRENCY = 'USD'
-CURRENCIES = ('USD',)
+DEFAULT_CURRENCY = 'GHS'
+CURRENCIES = ('GHS',)
 
 # Cart (US-12, Business Rule: 'Abandoned checkout preserves the cart') —
 # a cart is only expired after this many days without activity (Cart.last_activity).
