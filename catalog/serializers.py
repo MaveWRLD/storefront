@@ -1,11 +1,14 @@
 import json
 from decimal import Decimal, InvalidOperation
 from django.conf import settings
+from django.db import transaction
 from django.utils.text import slugify
 from djmoney.money import Money
 from rest_framework import serializers
 from orders.models import Order, OrderItem
-from media_storage.services.upload import delete_image, upload_image
+from media_storage.services.upload import (
+    InvalidImageError, delete_image, upload_image, validate_image_bytes,
+)
 from media_storage.services.image_url_builder import build_url
 from .models import (
     AxisValue, Product, ProductAxis, ProductImage, Collection, Review, Variant,
@@ -37,6 +40,15 @@ class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
         fields = ['id', 'image', 'alt_text', 'sort_order', 'axis_value']
+
+    def validate_image(self, image_file):
+        data = image_file.read()
+        image_file.seek(0)
+        try:
+            validate_image_bytes(data)
+        except InvalidImageError as e:
+            raise serializers.ValidationError(str(e))
+        return image_file
 
     def validate_axis_value(self, axis_value):
         # An image tagged to a swatch must be a value of an axis on this
@@ -256,36 +268,47 @@ class CreateProductSerializer(serializers.Serializer):
         parsed['_currency'] = currency
         return parsed
 
+    def validate_images(self, images):
+        for image_file in images:
+            data = image_file.read()
+            image_file.seek(0)
+            try:
+                validate_image_bytes(data)
+            except InvalidImageError as e:
+                raise serializers.ValidationError(str(e))
+        return images
+
     def create(self, validated_data):
-        data = validated_data['data']
-        images = validated_data['images']
+        with transaction.atomic():
+            data = validated_data['data']
+            images = validated_data['images']
 
-        product = Product.objects.create(
-            title=data['_title'],
-            slug=unique_slug_from(data['_title']),
-            price=Money(data['_amount'], data['_currency']))
+            product = Product.objects.create(
+                title=data['_title'],
+                slug=unique_slug_from(data['_title']),
+                price=Money(data['_amount'], data['_currency']))
 
-        for axis in data['axes']:
-            axis_obj = ProductAxis.objects.create(
-                product=product, name=axis['name'].strip(),
-                sort_order=axis.get('sortOrder', 0))
-            for value in axis['allowedValues']:
-                AxisValue.objects.create(
-                    axis=axis_obj, name=value['name'].strip(),
-                    code=value.get('code', ''))
+            for axis in data['axes']:
+                axis_obj = ProductAxis.objects.create(
+                    product=product, name=axis['name'].strip(),
+                    sort_order=axis.get('sortOrder', 0))
+                for value in axis['allowedValues']:
+                    AxisValue.objects.create(
+                        axis=axis_obj, name=value['name'].strip(),
+                        code=value.get('code', ''))
 
-        # bulk_create can't run per-row I/O — upload each file first
-        # (sequentially; there's no async story here), then insert the
-        # rows in one bulk statement with the resulting keys.
-        image_keys = [
-            upload_image(image, product_id=product.id)
-            for image in images
-        ]
-        ProductImage.objects.bulk_create([
-            ProductImage(product=product, image_key=key, sort_order=i)
-            for i, key in enumerate(image_keys)
-        ])
-        return product
+            # bulk_create can't run per-row I/O — upload each file first
+            # (sequentially; there's no async story here), then insert the
+            # rows in one bulk statement with the resulting keys.
+            image_keys = [
+                upload_image(image, product_id=product.id)
+                for image in images
+            ]
+            ProductImage.objects.bulk_create([
+                ProductImage(product=product, image_key=key, sort_order=i)
+                for i, key in enumerate(image_keys)
+            ])
+            return product
 
 
 class ReviewSerializer(serializers.ModelSerializer):
