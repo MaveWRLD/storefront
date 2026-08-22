@@ -1,7 +1,7 @@
 from django.test import override_settings
 import pytest
 
-from media_storage.backends.factory import get_storage_backend
+from media_storage.backends.factory import _build, get_storage_backend
 from media_storage.backends.local import LocalStorageBackend
 from media_storage.backends.r2 import R2StorageBackend
 
@@ -15,9 +15,9 @@ R2_SETTINGS = {
 
 @pytest.fixture(autouse=True)
 def clear_cache():
-    get_storage_backend.cache_clear()
+    _build.cache_clear()
     yield
-    get_storage_backend.cache_clear()
+    _build.cache_clear()
 
 
 def test_returns_local_backend_by_default(tmp_path):
