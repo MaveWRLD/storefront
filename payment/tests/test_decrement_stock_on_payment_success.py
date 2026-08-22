@@ -25,8 +25,12 @@ def variant():
 def order(variant):
     order = Order.objects.create(
         fulfillment_method=Order.FULFILLMENT_DELIVERY,
-        guest_name='Guest', guest_email='guest@example.com',
-        guest_phone='0800000000',
+        shipping_address={
+        'recipient_name': 'Guest', 'email': 'guest@example.com',
+        'phone': '0800000000', 'street_address': '1 Test St',
+        'city': 'Accra', 'region': 'Greater Accra',
+        'coordinates': {'lat': 5.6, 'lng': -0.2},
+    },
     )
     OrderItem.objects.create(
         order=order, variant=variant, quantity=2, unit_price=variant.unit_price)
