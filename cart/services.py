@@ -2,7 +2,7 @@ from django.db import transaction
 from .models import Cart, CartItem
 
 # The only thing the guest session carries — an id pointing at a Cart row.
-# Session engine is signed_cookies (storefront/settings.py), so this lives
+# Session engine is signed_cookies (storefront/settings/base.py), so this lives
 # entirely in the signed cookie, never in a server-side session table.
 CART_SESSION_KEY = 'cart_id'
 
