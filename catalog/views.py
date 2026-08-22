@@ -35,7 +35,8 @@ class ProductViewSet(ReadOnlyModelViewSet):
     # distinct(): filtering/ordering crosses the Product->Variant relation
     # now (price lives on Variant), which can otherwise duplicate a Product
     # row per matching variant.
-    queryset = Product.objects.all().distinct()
+    queryset = Product.objects.all().distinct().prefetch_related(
+        'images', 'variants__images', 'axes__values__images')
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ProductFilter
@@ -77,7 +78,8 @@ class ProductViewSet(ReadOnlyModelViewSet):
 )
 class ProductAdminViewSet(ModelViewSet):
     """store-admin/: full CRUD, staff-only."""
-    queryset = Product.objects.all().distinct()
+    queryset = Product.objects.all().distinct().prefetch_related(
+        'images', 'variants__images', 'axes__values__images')
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ProductFilter
