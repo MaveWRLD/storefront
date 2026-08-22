@@ -193,6 +193,31 @@ if MEDIA_STORAGE_BACKEND == 'r2':
 # Default primary key field type
 # https://docs.djangoproject.com/en/3.2/ref/settings/#default-auto-field
 
+# Without this, an uncaught 500 (django.request logger) goes nowhere —
+# no console handler is configured by default outside runserver/DEBUG.
+# Gunicorn's own stdout/stderr becomes the traceback destination here,
+# which is what Railway's log viewer actually shows.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
