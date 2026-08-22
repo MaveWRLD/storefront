@@ -12,6 +12,7 @@ from media_storage.services.upload import (
 from media_storage.services.image_url_builder import build_url
 from .models import (
     AxisValue, Product, ProductAxis, ProductImage, Collection, Review, Variant,
+    VariantAxisValue,
 )
 
 
@@ -39,7 +40,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductImage
-        fields = ['id', 'image', 'alt_text', 'sort_order', 'axis_value']
+        fields = ['id', 'image', 'alt_text', 'sort_order', 'axis_value', 'variant']
 
     def validate_image(self, image_file):
         data = image_file.read()
@@ -59,6 +60,22 @@ class ProductImageSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'This axis value does not belong to this product.')
         return axis_value
+
+    def validate_variant(self, variant):
+        # Same idea as axis_value above: an override photo must actually
+        # belong to a variant of this same product.
+        product_id = self.context['product_id']
+        if not variant.product_id == int(product_id):
+            raise serializers.ValidationError(
+                'This variant does not belong to this product.')
+        return variant
+
+    def validate(self, attrs):
+        if attrs.get('axis_value') and attrs.get('variant'):
+            raise serializers.ValidationError(
+                'An image can be tagged to an axis value (swatch) or a '
+                'variant (override), not both.')
+        return attrs
 
     def create(self, validated_data):
         product_id = self.context['product_id']
@@ -94,28 +111,110 @@ class SimpleProductSerializer(serializers.ModelSerializer):
         fields = ['id', 'title']
 
 
+class VariantAxisValueSerializer(serializers.ModelSerializer):
+    """Read shape for a variant's selected axis values — e.g.
+    {'axis': 'Size', 'value': 'Medium', 'code': 'M'} — so a client can build
+    a 'Size: Medium / Color: Red' selector without a second round-trip to
+    /products/{slug}/ to cross-reference axis names."""
+    axis = serializers.CharField(source='axis_value.axis.name', read_only=True)
+    value = serializers.CharField(source='axis_value.name', read_only=True)
+    code = serializers.CharField(source='axis_value.code', read_only=True)
+
+    class Meta:
+        model = VariantAxisValue
+        fields = ['axis', 'value', 'code']
+
+
 class VariantSerializer(serializers.ModelSerializer):
     """Domains — Catalog class diagram: Product 1-->0..* Variant. Writable
     so a product's variants can be created/replaced through the product
     endpoint (US-20/US-21) — there's no separate variant-management story yet."""
     price_with_tax = serializers.SerializerMethodField()
     in_stock = serializers.BooleanField(read_only=True)
+    axis_values = serializers.SerializerMethodField()
+    # Write side: exactly one AxisValue id per axis defined on the parent
+    # product. Named distinctly from the read-only `axis_values` above so
+    # input/output don't collide on shape (ids in, expanded objects out).
+    axis_value_ids = serializers.PrimaryKeyRelatedField(
+        queryset=AxisValue.objects.all(), many=True, required=False,
+        write_only=True,
+        help_text="One AxisValue id per axis defined on this variant's product.")
 
     class Meta:
         model = Variant
         fields = ['id', 'sku', 'unit_price', 'price_with_tax',
                   'compare_at_price', 'weight', 'track_inventory',
-                  'inventory', 'in_stock']
+                  'inventory', 'in_stock', 'axis_values', 'axis_value_ids']
 
     def get_price_with_tax(self, variant: Variant):
         return variant.unit_price.amount * Decimal(1.1)
+
+    def get_axis_values(self, variant: Variant):
+        return VariantAxisValueSerializer(
+            variant.axis_values.select_related('axis_value__axis'),
+            many=True).data
+
+    def _resolve_axis_values(self, product_id, axis_values):
+        """Business Rule (Catalog): a variant must select exactly one
+        AxisValue per axis defined on its product — no axis left unpicked,
+        no axis picked twice. Enforced here, not by the schema (the
+        VariantAxisValue table only stops the identical row repeating)."""
+        for axis_value in axis_values:
+            if axis_value.axis.product_id != int(product_id):
+                raise serializers.ValidationError(
+                    {'axis_value_ids': f"'{axis_value.name}' does not belong to this product."})
+
+        axis_ids = [axis_value.axis_id for axis_value in axis_values]
+        if len(axis_ids) != len(set(axis_ids)):
+            raise serializers.ValidationError(
+                {'axis_value_ids': 'Only one value per axis is allowed.'})
+
+        product_axis_ids = set(
+            ProductAxis.objects.filter(product_id=product_id).values_list('id', flat=True))
+        if set(axis_ids) != product_axis_ids:
+            raise serializers.ValidationError(
+                {'axis_value_ids': 'A value must be provided for every axis on this product.'})
+
+    def _ensure_no_duplicate_variant(self, product_id, axis_values, exclude_variant_id=None):
+        """Business Rule (Catalog): no two variants of the same product may
+        select the identical combination of axis values."""
+        wanted = {axis_value.id for axis_value in axis_values}
+        siblings = Variant.objects.filter(product_id=product_id)
+        if exclude_variant_id:
+            siblings = siblings.exclude(pk=exclude_variant_id)
+        for sibling in siblings.prefetch_related('axis_values'):
+            existing = {link.axis_value_id for link in sibling.axis_values.all()}
+            if existing == wanted:
+                raise serializers.ValidationError(
+                    {'axis_value_ids': 'Another variant already uses this exact combination of axis values.'})
 
     def create(self, validated_data):
         # Only hit when used standalone (VariantAdminViewSet) — the nested
         # product-create/update flow creates Variant rows itself and never
         # calls this.
         product_id = self.context['product_id']
-        return Variant.objects.create(product_id=product_id, **validated_data)
+        axis_values = validated_data.pop('axis_value_ids', [])
+        self._resolve_axis_values(product_id, axis_values)
+        self._ensure_no_duplicate_variant(product_id, axis_values)
+        variant = Variant.objects.create(product_id=product_id, **validated_data)
+        VariantAxisValue.objects.bulk_create([
+            VariantAxisValue(variant=variant, axis_value=axis_value)
+            for axis_value in axis_values
+        ])
+        return variant
+
+    def update(self, instance, validated_data):
+        axis_values = validated_data.pop('axis_value_ids', None)
+        if axis_values is not None:
+            self._resolve_axis_values(instance.product_id, axis_values)
+            self._ensure_no_duplicate_variant(
+                instance.product_id, axis_values, exclude_variant_id=instance.pk)
+            instance.axis_values.all().delete()
+            VariantAxisValue.objects.bulk_create([
+                VariantAxisValue(variant=instance, axis_value=axis_value)
+                for axis_value in axis_values
+            ])
+        return super().update(instance, validated_data)
 
 
 class SimpleVariantSerializer(serializers.ModelSerializer):
@@ -146,9 +245,13 @@ class ProductAxisSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    """Read/plain-update shape. Creation goes through
+    CreateProductSerializer instead (see ProductAdminViewSet.create) — this
+    serializer's own `create()` is unused in practice but left working for
+    any direct/test use."""
     class Meta:
         model = Product
-        fields = ['id', 'title', 'description', 'slug', 'collection',
+        fields = ['id', 'title', 'description', 'slug', 'collection', 'price',
                   'status', 'is_available', 'in_stock', 'images',
                   'variants', 'axes']
 
@@ -164,19 +267,9 @@ class ProductSerializer(serializers.ModelSerializer):
     # accepted from the client.
     slug = serializers.SlugField(read_only=True)
 
-    def _unique_slug_from(self, title, instance=None):
-        base_slug = slugify(title)
-        slug = base_slug
-        qs = Product.objects.exclude(pk=instance.pk) if instance else Product.objects.all()
-        suffix = 1
-        while qs.filter(slug=slug).exists():
-            suffix += 1
-            slug = f'{base_slug}-{suffix}'
-        return slug
-
     def create(self, validated_data):
         axes_data = validated_data.pop('axes', [])
-        validated_data['slug'] = self._unique_slug_from(validated_data['title'])
+        validated_data['slug'] = unique_slug_from(validated_data['title'])
         product = Product.objects.create(**validated_data)
         for axis_data in axes_data:
             values_data = axis_data.pop('values', [])
@@ -193,7 +286,7 @@ class ProductSerializer(serializers.ModelSerializer):
         validated_data.pop('axes', None)
         new_title = validated_data.get('title')
         if new_title and new_title != instance.title:
-            validated_data['slug'] = self._unique_slug_from(new_title, instance=instance)
+            validated_data['slug'] = unique_slug_from(new_title, instance=instance)
         return super().update(instance, validated_data)
 
 
