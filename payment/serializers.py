@@ -12,7 +12,15 @@ from .models import Payment
 
 
 class InitializePaymentSerializer(serializers.Serializer):
+    """Requires proof of order ownership — order_id alone isn't enough,
+    since ids are sequential and guessable. A guest order (no customer)
+    proves ownership with guest_token, the write-once secret returned by
+    order creation (orders/serializers.py:OrderSerializer); an
+    authenticated order proves it by request.user owning the order's
+    customer. Without this, anyone who guesses an order_id could start a
+    Paystack transaction against someone else's order."""
     order_id = serializers.IntegerField()
+    guest_token = serializers.CharField(required=False)
 
     def validate_order_id(self, order_id):
         try:
@@ -21,10 +29,26 @@ class InitializePaymentSerializer(serializers.Serializer):
             raise serializers.ValidationError('No order with the given ID was found.')
         if order.payment_status == Order.PAYMENT_STATUS_COMPLETE:
             raise serializers.ValidationError('This order has already been paid for.')
+        self._order = order
         return order_id
 
+    def validate(self, data):
+        order = self._order
+        request = self.context['request']
+        if order.customer_id is not None:
+            user = request.user
+            is_owner = user.is_authenticated and \
+                getattr(order.customer, 'user_id', None) == user.id
+            if not is_owner:
+                raise serializers.ValidationError(
+                    'You do not have permission to pay for this order.')
+        elif data.get('guest_token') != order.guest_token:
+            raise serializers.ValidationError(
+                'You do not have permission to pay for this order.')
+        return data
+
     def save(self, **kwargs):
-        order = Order.objects.get(pk=self.validated_data['order_id'])
+        order = self._order
         reference = uuid4().hex
         total = order.get_total()
         gateway_name = Payment.GATEWAY_PAYSTACK  # only gateway registered so far
@@ -110,12 +134,34 @@ def confirm_payment(reference, transaction_data=None):
 
 
 class VerifyPaymentSerializer(serializers.Serializer):
+    """Same ownership proof as InitializePaymentSerializer, checked
+    against the payment's order — a guessed/leaked reference alone isn't
+    enough to poll (and thus confirm) someone else's payment."""
     reference = serializers.CharField()
+    guest_token = serializers.CharField(required=False)
 
     def validate_reference(self, reference):
-        if not Payment.objects.filter(reference=reference).exists():
+        try:
+            self._payment = Payment.objects.select_related('order__customer').get(
+                reference=reference)
+        except Payment.DoesNotExist:
             raise serializers.ValidationError('No payment with the given reference was found.')
         return reference
+
+    def validate(self, data):
+        order = self._payment.order
+        request = self.context['request']
+        if order.customer_id is not None:
+            user = request.user
+            is_owner = user.is_authenticated and \
+                getattr(order.customer, 'user_id', None) == user.id
+            if not is_owner:
+                raise serializers.ValidationError(
+                    'You do not have permission to view this payment.')
+        elif data.get('guest_token') != order.guest_token:
+            raise serializers.ValidationError(
+                'You do not have permission to view this payment.')
+        return data
 
     def save(self, **kwargs):
         try:

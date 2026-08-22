@@ -54,6 +54,18 @@ class OrderSerializer(serializers.ModelSerializer):
                   'fulfillment_method', 'placed_at', 'payment_status', 'status',
                   'subtotal', 'items', 'unavailable_items']
 
+    def to_representation(self, instance):
+        # guest_token is the payment credential (payment/views.py) — it's a
+        # write-once secret, not a normal order field, so it's added here
+        # rather than in Meta.fields and only for the create-order response
+        # (context flag set by OrderViewSet.create), never on list/retrieve/
+        # lookup where it'd leak the credential to anyone who can see the
+        # order by other means.
+        data = super().to_representation(instance)
+        if self.context.get('include_guest_token'):
+            data['guest_token'] = instance.guest_token
+        return data
+
     def get_name(self, order):
         if order.shipping_address and order.shipping_address.get('recipient_name'):
             return order.shipping_address['recipient_name']

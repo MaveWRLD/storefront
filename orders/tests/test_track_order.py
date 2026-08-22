@@ -20,15 +20,17 @@ def order():
     )
 
 
-def pay_successfully(order_id):
+def pay_successfully(order):
     client = APIClient()
     with patch('payment.gateways.paystack.PaystackGateway.initialize_transaction') as init_mock:
         init_mock.return_value = {'authorization_url': 'https://paystack.test/pay'}
         reference = client.post(
-            '/store-front/payments/initialize/', {'order_id': order_id}).data['reference']
+            '/store-front/payments/initialize/',
+            {'order_id': order.id, 'guest_token': order.guest_token}).data['reference']
     with patch('payment.gateways.paystack.PaystackGateway.verify_transaction') as verify_mock:
         verify_mock.return_value = {'status': 'success'}
-        client.post('/store-front/payments/verify/', {'reference': reference})
+        client.post('/store-front/payments/verify/', {
+            'reference': reference, 'guest_token': order.guest_token})
 
 
 @pytest.mark.django_db
@@ -40,7 +42,7 @@ class TestTrackOrder:
         assert response.data['status'] == ''
 
     def test_order_moves_to_confirmed_once_payment_succeeds(self, order):
-        pay_successfully(order.id)
+        pay_successfully(order)
 
         client = APIClient()
         response = client.post('/store-front/orders/lookup/', {

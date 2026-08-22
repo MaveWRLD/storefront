@@ -1,5 +1,11 @@
+import secrets
+
 from django.db import models
 from djmoney.models.fields import MoneyField
+
+
+def generate_guest_token():
+    return secrets.token_urlsafe(32)
 
 
 class Order(models.Model):
@@ -38,6 +44,15 @@ class Order(models.Model):
         (STATUS_CANCELLED, 'Cancelled'),
     ]
 
+    # Guest payment credential (mirrors the old orderToken): unguessable,
+    # generated once at order creation, returned only in the create-order
+    # response. payment/views.py requires it on initialize/verify so an
+    # attacker who guesses/enumerates `id` can't drive payment on someone
+    # else's order. An authenticated order is instead gated by
+    # order.customer == request.user's customer, not this token.
+    guest_token = models.CharField(
+        max_length=43, default=generate_guest_token,
+        editable=False, unique=True)
     placed_at = models.DateTimeField(auto_now_add=True)
     payment_status = models.CharField(
         max_length=1, choices=PAYMENT_STATUS_CHOICES, default=PAYMENT_STATUS_PENDING)
