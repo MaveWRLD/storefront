@@ -19,6 +19,12 @@ class AddressSerializer(serializers.Serializer):
     ghana_post_gps is the optional GhanaPost digital-address code; nothing
     in this codebase resolves it to coordinates, so it's carried through
     as-is rather than substituting for them.
+
+    coordinates is optional at this field level — a PICKUP order has no
+    Dawurobo delivery to price, so it never needs them (no geocoding UI
+    exists for a walk-in guest). Callers that DO need a delivery quote
+    (RateQuoteSerializer, CreateOrderSerializer for a DELIVERY order)
+    enforce it themselves in validate().
     """
     recipient_name = serializers.CharField()
     email = serializers.EmailField()
@@ -27,7 +33,7 @@ class AddressSerializer(serializers.Serializer):
     city = serializers.CharField()
     region = serializers.CharField()
     ghana_post_gps = serializers.CharField(required=False, allow_blank=True, default='')
-    coordinates = serializers.DictField(child=serializers.FloatField())
+    coordinates = serializers.DictField(child=serializers.FloatField(), required=False)
 
 
 class RateQuoteSerializer(serializers.Serializer):
@@ -62,6 +68,12 @@ class RateQuoteSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     'No address given, and none on file for this order.')
             data['address'] = order.shipping_address
+        # validate_order_id already enforces DELIVERY-only, so a quote
+        # always needs coordinates to price against — even though the
+        # AddressSerializer field itself is optional for PICKUP callers.
+        if not data['address'].get('coordinates'):
+            raise serializers.ValidationError(
+                'The given address has no coordinates to quote against.')
         return data
 
     def save(self, **kwargs):

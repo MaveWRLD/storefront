@@ -47,12 +47,24 @@ class OrderSerializer(serializers.ModelSerializer):
     # get_email() worth adding for one caller).
     name = serializers.SerializerMethodField()
     email = serializers.SerializerMethodField()
+    # total = subtotal + shipping_cost (Order.get_total()) — shipping_cost
+    # stays 0 until /shipping/rates/ has been called for a DELIVERY order
+    # (shipping/serializers.py:RateQuoteSerializer.save persists it), and
+    # 0 permanently for PICKUP.
+    total = serializers.SerializerMethodField()
+    # Full shipping_address JSON (same shape CreateOrder.address takes —
+    # AddressSerializer's recipient_name/email/phone/street_address/city/
+    # region/ghana_post_gps/coordinates) — name/email above only ever
+    # peeled off one or two fields for the old callers, but the delivery-
+    # address cards on the frontend need the whole thing. None for an
+    # authenticated customer's PICKUP order with nothing on file.
+    address = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
-        fields = ['id', 'customer', 'name', 'email',
+        fields = ['id', 'customer', 'name', 'email', 'address',
                   'fulfillment_method', 'placed_at', 'payment_status', 'status',
-                  'subtotal', 'items', 'unavailable_items']
+                  'subtotal', 'shipping_cost', 'total', 'items', 'unavailable_items']
 
     def to_representation(self, instance):
         # guest_token is the payment credential (payment/views.py) — it's a
@@ -75,6 +87,15 @@ class OrderSerializer(serializers.ModelSerializer):
 
     def get_email(self, order):
         return order.get_email()
+
+    def get_address(self, order):
+        return order.shipping_address or None
+
+    def get_total(self, order):
+        # .amount only, matching how the MoneyField mapping serializes
+        # subtotal/shipping_cost (plain decimal, no currency) — order.get_total()
+        # returns a Money instance, which isn't JSON-serializable as-is.
+        return order.get_total().amount
 
     def get_unavailable_items(self, order):
         # Not persisted (US-09): the checkout-time stock re-check drops these
@@ -234,11 +255,21 @@ class CreateOrderSerializer(serializers.Serializer):
     def validate(self, data):
         user = self.context.get('user')
         is_guest = user is None or not user.is_authenticated
-        address_required = is_guest or data['fulfillment_method'] == Order.FULFILLMENT_DELIVERY
+        is_delivery = data['fulfillment_method'] == Order.FULFILLMENT_DELIVERY
+        address_required = is_guest or is_delivery
         if address_required and not data.get('address'):
             message = ('Guest checkout requires an address.' if is_guest else
                        'A delivery order requires an address.')
             raise serializers.ValidationError(message)
+
+        # coordinates are what shipping/serializers.py's RateQuoteSerializer
+        # prices Dawurobo delivery against — only meaningful for DELIVERY.
+        # AddressSerializer.coordinates is optional at the field level (a
+        # guest PICKUP order supplies identity fields only, no geocoding
+        # UI exists for that flow), so DELIVERY has to demand it here.
+        if is_delivery and data.get('address') and not data['address'].get('coordinates'):
+            raise serializers.ValidationError(
+                'A delivery order requires coordinates on the address.')
 
         # The cart is never passed in by the client — it's resolved the same
         # way cart/views.py resolves it: the authenticated user's cart, or

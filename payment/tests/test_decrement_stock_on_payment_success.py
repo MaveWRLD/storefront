@@ -25,6 +25,7 @@ def variant():
 def order(variant):
     order = Order.objects.create(
         fulfillment_method=Order.FULFILLMENT_DELIVERY,
+        shipping_cost=500,  # simulates a completed /shipping/rates/ quote
         shipping_address={
         'recipient_name': 'Guest', 'email': 'guest@example.com',
         'phone': '0800000000', 'street_address': '1 Test St',
