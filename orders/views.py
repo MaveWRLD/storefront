@@ -53,7 +53,8 @@ class OrderViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, Generic
             context={'user': user, 'request': request})
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
-        serializer = OrderSerializer(order)
+        serializer = OrderSerializer(
+            order, context={'include_guest_token': True})
         return Response(serializer.data)
 
     @extend_schema(

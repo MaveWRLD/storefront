@@ -2,6 +2,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .gateways import get_gateway
@@ -14,14 +15,22 @@ from .serializers import (
 
 class InitializePaymentView(APIView):
     """Starts a Paystack transaction for an order. Open to guests too —
-    guest checkout (US-06a) must not require an account to pay."""
+    guest checkout (US-06a) must not require an account to pay — but
+    ownership is still required: guest_token for a guest order, the
+    authenticated user owning the order otherwise (see
+    InitializePaymentSerializer). Throttled: order_id/guest_token is
+    guessable/brute-forceable like the order-lookup endpoint."""
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'payment'
 
     @extend_schema(
         summary='Initialize payment',
-        description='Start a Paystack transaction for an order and return its authorization URL. Open to everyone.')
+        description='Start a Paystack transaction for an order and return its authorization URL. '
+                    'Requires guest_token for a guest order, or an authenticated owner.')
     def post(self, request):
-        serializer = InitializePaymentSerializer(data=request.data)
+        serializer = InitializePaymentSerializer(
+            data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         result = serializer.save()
         return Response({
@@ -35,15 +44,20 @@ class VerifyPaymentView(APIView):
 
     Fast UX path for a customer waiting on the result. The Paystack
     webhook (PaystackWebhookView) is the source-of-truth safety net for
-    customers who close the tab before this call ever fires.
+    customers who close the tab before this call ever fires. Same
+    ownership + throttling requirement as InitializePaymentView.
     """
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'payment'
 
     @extend_schema(
         summary='Verify payment',
-        description='Check a transaction\'s outcome with Paystack and update the order accordingly. Open to everyone.')
+        description='Check a transaction\'s outcome with Paystack and update the order accordingly. '
+                    'Requires guest_token for a guest order, or an authenticated owner.')
     def post(self, request):
-        serializer = VerifyPaymentSerializer(data=request.data)
+        serializer = VerifyPaymentSerializer(
+            data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         payment = serializer.save()
         return Response(PaymentSerializer(payment).data)

@@ -34,14 +34,16 @@ def make_order():
     return _make
 
 
-def initialize_and_pay(order_id, outcome_status='success'):
+def initialize_and_pay(order, outcome_status='success'):
     client = APIClient()
     with patch('payment.gateways.paystack.PaystackGateway.initialize_transaction') as mocked:
         mocked.return_value = {'authorization_url': 'https://paystack.test/pay'}
-        init_response = client.post('/store-front/payments/initialize/', {'order_id': order_id})
+        init_response = client.post('/store-front/payments/initialize/', {
+            'order_id': order.id, 'guest_token': order.guest_token})
     with patch('payment.gateways.paystack.PaystackGateway.verify_transaction') as mocked:
         mocked.return_value = {'status': outcome_status}
-        client.post('/store-front/payments/verify/', {'reference': init_response.data['reference']})
+        client.post('/store-front/payments/verify/', {
+            'reference': init_response.data['reference'], 'guest_token': order.guest_token})
 
 
 @pytest.mark.django_db
@@ -60,7 +62,7 @@ class TestOrderMilestoneNotifications:
     },
         )
 
-        initialize_and_pay(order.id, 'success')
+        initialize_and_pay(order, 'success')
 
         assert Notification.objects.filter(
             order=order, event_type=Notification.EVENT_ORDER_CONFIRMED).exists()
@@ -76,7 +78,7 @@ class TestOrderMilestoneNotifications:
     },
         )
 
-        initialize_and_pay(order.id, 'failed')
+        initialize_and_pay(order, 'failed')
 
         assert not Notification.objects.filter(
             order=order, event_type=Notification.EVENT_ORDER_CONFIRMED).exists()

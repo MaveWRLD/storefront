@@ -215,6 +215,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'auth': '5/min',
         'order-lookup': '20/min',
+        'payment': '20/min',
     },
 }
 

@@ -37,18 +37,20 @@ def order(variant):
     return order
 
 
-def initialize(order_id):
+def initialize(order):
     client = APIClient()
     with patch('payment.gateways.paystack.PaystackGateway.initialize_transaction') as mocked:
         mocked.return_value = {'authorization_url': 'https://paystack.test/pay'}
-        return client.post('/store-front/payments/initialize/', {'order_id': order_id})
+        return client.post('/store-front/payments/initialize/', {
+            'order_id': order.id, 'guest_token': order.guest_token})
 
 
-def verify_as(reference, outcome_status):
+def verify_as(reference, outcome_status, guest_token):
     client = APIClient()
     with patch('payment.gateways.paystack.PaystackGateway.verify_transaction') as mocked:
         mocked.return_value = {'status': outcome_status}
-        return client.post('/store-front/payments/verify/', {'reference': reference})
+        return client.post('/store-front/payments/verify/', {
+            'reference': reference, 'guest_token': guest_token})
 
 
 @pytest.mark.django_db
@@ -59,9 +61,9 @@ class TestDecrementStockOnPaymentSuccess:
     together, by the order line's quantity."""
 
     def test_successful_payment_decrements_inventory_and_releases_allocated(self, order, variant):
-        payment = initialize(order.id)
+        payment = initialize(order)
 
-        response = verify_as(payment.data['reference'], 'success')
+        response = verify_as(payment.data['reference'], 'success', order.guest_token)
 
         assert response.status_code == status.HTTP_200_OK
         variant.refresh_from_db()
@@ -69,9 +71,9 @@ class TestDecrementStockOnPaymentSuccess:
         assert variant.allocated == 0
 
     def test_failed_payment_leaves_inventory_and_allocated_untouched(self, order, variant):
-        payment = initialize(order.id)
+        payment = initialize(order)
 
-        response = verify_as(payment.data['reference'], 'failed')
+        response = verify_as(payment.data['reference'], 'failed', order.guest_token)
 
         assert response.status_code == status.HTTP_200_OK
         variant.refresh_from_db()
@@ -81,9 +83,9 @@ class TestDecrementStockOnPaymentSuccess:
     def test_untracked_variant_is_not_decremented_on_success(self, order, variant):
         Variant.objects.filter(pk=variant.pk).update(
             track_inventory=False, inventory=0, allocated=0)
-        payment = initialize(order.id)
+        payment = initialize(order)
 
-        response = verify_as(payment.data['reference'], 'success')
+        response = verify_as(payment.data['reference'], 'success', order.guest_token)
 
         assert response.status_code == status.HTTP_200_OK
         variant.refresh_from_db()
@@ -91,9 +93,9 @@ class TestDecrementStockOnPaymentSuccess:
         assert variant.allocated == 0
 
     def test_order_confirmed_on_success(self, order):
-        payment = initialize(order.id)
+        payment = initialize(order)
 
-        verify_as(payment.data['reference'], 'success')
+        verify_as(payment.data['reference'], 'success', order.guest_token)
 
         order.refresh_from_db()
         assert order.payment_status == Order.PAYMENT_STATUS_COMPLETE
