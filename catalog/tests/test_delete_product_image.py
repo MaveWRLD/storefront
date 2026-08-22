@@ -9,6 +9,7 @@ import pytest
 
 from catalog.models import Product, ProductImage
 from djmoney.money import Money
+from media_storage.services.upload import ImageUploadResult
 
 User = get_user_model()
 
@@ -36,7 +37,8 @@ def product(db):
 
 @pytest.mark.django_db
 def test_deleting_a_product_image_calls_delete_image(admin_client, product):
-    with patch('catalog.serializers.upload_image', return_value='products/1/x.png'):
+    with patch('catalog.serializers.upload_image',
+               return_value=ImageUploadResult(key='products/1/x.png', width=10, height=10)):
         create_resp = admin_client.post(
             f'/store-admin/products/{product.id}/images/',
             {'image': make_image()}, format='multipart')
@@ -53,30 +55,33 @@ def test_deleting_a_product_image_calls_delete_image(admin_client, product):
 
 @pytest.mark.django_db
 def test_created_image_response_includes_a_built_url(admin_client, product):
-    with patch('catalog.serializers.upload_image', return_value='products/1/x.png'):
+    with patch('catalog.serializers.upload_image',
+               return_value=ImageUploadResult(key='products/1/x.png', width=10, height=10)):
         create_resp = admin_client.post(
             f'/store-admin/products/{product.id}/images/',
             {'image': make_image()}, format='multipart')
     assert create_resp.status_code == status.HTTP_201_CREATED
-    assert isinstance(create_resp.data['image'], str)
-    assert create_resp.data['image'] != ''
+    assert isinstance(create_resp.data['src'], str)
+    assert create_resp.data['src'] != ''
 
 
 @pytest.mark.django_db
 def test_replacing_a_product_image_uploads_new_key_and_deletes_old(admin_client, product):
-    with patch('catalog.serializers.upload_image', return_value='products/1/old.png'):
+    with patch('catalog.serializers.upload_image',
+               return_value=ImageUploadResult(key='products/1/old.png', width=10, height=10)):
         create_resp = admin_client.post(
             f'/store-admin/products/{product.id}/images/',
             {'image': make_image()}, format='multipart')
     assert create_resp.status_code == status.HTTP_201_CREATED
     image_id = create_resp.data['id']
 
-    with patch('catalog.serializers.upload_image', return_value='products/1/new.png'), \
+    with patch('catalog.serializers.upload_image',
+               return_value=ImageUploadResult(key='products/1/new.png', width=10, height=10)), \
             patch('catalog.serializers.delete_image') as mock_delete_image:
         update_resp = admin_client.patch(
             f'/store-admin/products/{product.id}/images/{image_id}/',
             {'image': make_image('replacement.png')}, format='multipart')
 
     assert update_resp.status_code == status.HTTP_200_OK
-    assert update_resp.data['image'] != create_resp.data['image']
+    assert update_resp.data['object_key'] != create_resp.data['object_key']
     mock_delete_image.assert_called_once_with('products/1/old.png')
