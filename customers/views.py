@@ -64,9 +64,10 @@ class CustomerAdminViewSet(ModelViewSet):
 
     @extend_schema(
         summary='Get customer order history',
-        description="List a customer's past orders. Staff-only.")
-    @action(detail=True)
-    def history(self, request, pk):
+        description="List a customer's past orders. Staff-only.",
+        responses=OrderSerializer(many=True))
+    @action(detail=True, url_path='orders', url_name='orders')
+    def orders(self, request, pk):
         orders = Order.objects.filter(
             customer_id=pk).prefetch_related('items__variant__product')
         return Response(OrderSerializer(orders, many=True).data)

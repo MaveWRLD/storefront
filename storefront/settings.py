@@ -245,6 +245,14 @@ SIMPLE_JWT = {
 # encrypted — never put anything sensitive in request.session.
 SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
 
+# Cross-origin frontend (CORS_ALLOW_CREDENTIALS=True below) needs the
+# sessionid cookie sent on credentialed cross-site requests. SameSite=None
+# requires Secure — browsers drop the cookie without it, so this only works
+# over HTTPS (prod/staging); local http dev calling this cross-origin won't
+# receive the cookie back.
+SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True
+
 # django-money
 DEFAULT_CURRENCY = 'GHS'
 CURRENCIES = ('GHS',)

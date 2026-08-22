@@ -65,7 +65,7 @@ class TestManageCustomers:
             customer=customer,
         )
 
-        response = admin_client.get(f'/store-admin/customers/{customer.id}/history/')
+        response = admin_client.get(f'/store-admin/customers/{customer.id}/orders/')
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 2
@@ -77,7 +77,7 @@ class TestManageCustomers:
         Order.objects.create(
             fulfillment_method=Order.FULFILLMENT_PICKUP, customer=other_customer)
 
-        response = admin_client.get(f'/store-admin/customers/{customer.id}/history/')
+        response = admin_client.get(f'/store-admin/customers/{customer.id}/orders/')
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data == []
