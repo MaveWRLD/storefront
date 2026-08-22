@@ -60,7 +60,7 @@ class TestAxisValueImages:
             format='multipart')
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data['axis_value'] == red.id
+        assert response.data['axis_value_id'] == red.id
 
     def test_image_without_axis_value_is_a_general_product_photo(self, admin_client, product):
         response = admin_client.post(
@@ -69,7 +69,7 @@ class TestAxisValueImages:
             format='multipart')
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data['axis_value'] is None
+        assert response.data['axis_value_id'] is None
 
     def test_axis_value_from_another_product_is_rejected(self, admin_client, product, collection):
         other_product = Product.objects.create(
