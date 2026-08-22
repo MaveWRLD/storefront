@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework.test import APIClient
 from rest_framework import status
 import pytest
@@ -59,3 +61,23 @@ class TestProductDetail:
         client = APIClient()
         response = client.get('/store-front/products/999999/')
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_variant_available_is_inventory_minus_allocated(self, make_product):
+        product = make_product(inventory=5)
+        variant = product.variants.get()
+        variant.allocated = 2
+        variant.save()
+        client = APIClient()
+        response = client.get(f'/store-front/products/{product.slug}/')
+        assert response.data['variants'][0]['available'] == 3
+
+    def test_variant_price_with_tax_is_exact_no_float_drift(self, make_product):
+        """Decimal(1.1) built from a float literal isn't exactly 1.1 and
+        can drift; Decimal('1.1') on Money math must not."""
+        product = make_product(inventory=1)
+        variant = product.variants.get()
+        variant.unit_price = 999
+        variant.save()
+        client = APIClient()
+        response = client.get(f'/store-front/products/{product.slug}/')
+        assert response.data['variants'][0]['price_with_tax'] == Decimal('1098.90')
