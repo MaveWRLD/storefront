@@ -172,12 +172,14 @@ class TestPerVariantImages:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_storefront_product_detail_exposes_variant_images(self, product, small):
-        from django.core.files.images import ImageFile
         variant = Variant.objects.create(product=product, sku='test-shirt-s', unit_price=1000)
         ProductImage.objects.create(
-            product=product, variant=variant, image=ImageFile(make_image(), name='test.png'))
+            product=product, variant=variant, image_key='products/1/variants/1/test.png')
 
         response = APIClient().get(f'/store-front/products/{product.slug}/')
         assert response.status_code == status.HTTP_200_OK
-        images = response.data['images']
-        assert any(img['variant'] == variant.id for img in images)
+        variant_data = next(v for v in response.data['variants'] if v['id'] == variant.id)
+        assert any(img['object_key'] == 'products/1/variants/1/test.png'
+                   for img in variant_data['images'])
+        assert not any(img['object_key'] == 'products/1/variants/1/test.png'
+                       for img in response.data['images'])
