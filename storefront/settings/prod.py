@@ -25,6 +25,14 @@ if not SECRET_KEY:
 if not ALLOWED_HOSTS:
     raise ImproperlyConfigured('ALLOWED_HOSTS must be set via env var in prod.')
 
+# DRF's BrowsableAPIRenderer is on by default (base.py doesn't override
+# DEFAULT_RENDERER_CLASSES) — HTML forms/login for every endpoint,
+# fine in dev, not something to expose in prod. JSON only here.
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+}
+
 # whitenoise needs collectstatic's manifest to fingerprint/cache-bust
 # assets — dev.py uses the plain filesystem storage instead.
 STORAGES = {
