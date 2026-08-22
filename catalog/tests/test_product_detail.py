@@ -30,7 +30,7 @@ class TestProductDetail:
     def test_detail_returns_images_description_price_and_stock_status(self, make_product):
         product = make_product()
         client = APIClient()
-        response = client.get(f'/store-front/products/{product.id}/')
+        response = client.get(f'/store-front/products/{product.slug}/')
 
         assert response.status_code == status.HTTP_200_OK
         for field in ('images', 'description', 'variants', 'in_stock', 'is_available'):
@@ -40,19 +40,19 @@ class TestProductDetail:
     def test_in_stock_true_when_inventory_positive(self, make_product):
         product = make_product(inventory=3)
         client = APIClient()
-        response = client.get(f'/store-front/products/{product.id}/')
+        response = client.get(f'/store-front/products/{product.slug}/')
         assert response.data['in_stock'] is True
 
     def test_in_stock_false_when_inventory_zero(self, make_product):
         product = make_product(inventory=0)
         client = APIClient()
-        response = client.get(f'/store-front/products/{product.id}/')
+        response = client.get(f'/store-front/products/{product.slug}/')
         assert response.data['in_stock'] is False
 
     def test_unpublished_product_detail_is_marked_not_available(self, make_product):
         product = make_product(status=ProductStatus.DRAFT)
         client = APIClient()
-        response = client.get(f'/store-front/products/{product.id}/')
+        response = client.get(f'/store-front/products/{product.slug}/')
         assert response.data['is_available'] is False
 
     def test_unknown_product_returns_404_not_error(self, make_product):

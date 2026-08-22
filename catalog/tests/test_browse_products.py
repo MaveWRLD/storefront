@@ -73,6 +73,6 @@ class TestBrowseProducts:
     def test_product_detail_includes_images_list(self, make_product):
         product = make_product()
         client = APIClient()
-        response = client.get(f'/store-front/products/{product.id}/')
+        response = client.get(f'/store-front/products/{product.slug}/')
         assert response.status_code == status.HTTP_200_OK
         assert response.data['images'] == []

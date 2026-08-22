@@ -26,7 +26,12 @@ class ProductAdmin(admin.ModelAdmin):
     search_fields = ['title']
 
     def collection_title(self, product):
-        return product.collection.title
+        return product.collection.title if product.collection else '—'
+
+
+class VariantAxisValueInline(admin.TabularInline):
+    model = models.VariantAxisValue
+    extra = 0
 
 
 @admin.register(models.Variant)
@@ -34,6 +39,7 @@ class VariantAdmin(admin.ModelAdmin):
     autocomplete_fields = ['product']
     list_display = ['sku', 'product', 'unit_price', 'inventory']
     search_fields = ['sku']
+    inlines = [VariantAxisValueInline]
 
 
 @admin.register(models.Collection)

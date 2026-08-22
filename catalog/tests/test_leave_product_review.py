@@ -57,7 +57,7 @@ class TestLeaveProductReview:
         complete_order_for(customer, product)
 
         response = client.post(
-            f'/store-front/products/{product.id}/reviews/',
+            f'/store-front/products/{product.slug}/reviews/',
             {'rating': 5, 'description': 'Great fit!'})
 
         assert response.status_code == status.HTTP_201_CREATED
@@ -69,10 +69,10 @@ class TestLeaveProductReview:
         customer, client = customer_and_client
         complete_order_for(customer, product)
         client.post(
-            f'/store-front/products/{product.id}/reviews/',
+            f'/store-front/products/{product.slug}/reviews/',
             {'rating': 4, 'description': 'Nice.'})
 
-        response = APIClient().get(f'/store-front/products/{product.id}/reviews/')
+        response = APIClient().get(f'/store-front/products/{product.slug}/reviews/')
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) == 1
@@ -82,7 +82,7 @@ class TestLeaveProductReview:
         _, client = customer_and_client
 
         response = client.post(
-            f'/store-front/products/{product.id}/reviews/',
+            f'/store-front/products/{product.slug}/reviews/',
             {'rating': 5, 'description': 'Nice.'})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -94,7 +94,7 @@ class TestLeaveProductReview:
         Order.objects.filter(customer=customer).update(status=Order.STATUS_CONFIRMED)
 
         response = client.post(
-            f'/store-front/products/{product.id}/reviews/',
+            f'/store-front/products/{product.slug}/reviews/',
             {'rating': 5, 'description': 'Nice.'})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -103,7 +103,7 @@ class TestLeaveProductReview:
         client = APIClient()
 
         response = client.post(
-            f'/store-front/products/{product.id}/reviews/',
+            f'/store-front/products/{product.slug}/reviews/',
             {'rating': 5, 'description': 'Nice.'})
 
         assert response.status_code in (
@@ -114,7 +114,7 @@ class TestLeaveProductReview:
         complete_order_for(customer, product)
 
         response = client.post(
-            f'/store-front/products/{product.id}/reviews/',
+            f'/store-front/products/{product.slug}/reviews/',
             {'rating': 6, 'description': 'Too high.'})
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -123,9 +123,9 @@ class TestLeaveProductReview:
         customer, client = customer_and_client
         complete_order_for(customer, product)
         client.post(
-            f'/store-front/products/{product.id}/reviews/',
+            f'/store-front/products/{product.slug}/reviews/',
             {'rating': 3, 'description': 'Ok.'})
 
-        response = APIClient().get(f'/store-front/products/{product.id}/reviews/')
+        response = APIClient().get(f'/store-front/products/{product.slug}/reviews/')
 
         assert response.status_code == status.HTTP_200_OK
