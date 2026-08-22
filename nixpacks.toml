@@ -1,0 +1,7 @@
+# python-magic (media_storage/services/upload.py) wraps libmagic via
+# ctypes at import time — Django imports it at startup (catalog.serializers
+# -> media_storage.services.upload), so it's needed before the app can
+# even boot, not just when an upload happens. Nixpacks' Python provider
+# doesn't pull in system libs on its own; this does.
+[phases.setup]
+aptPkgs = ["libmagic1"]
