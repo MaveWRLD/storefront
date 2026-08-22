@@ -1,10 +1,15 @@
 import json
 from decimal import Decimal, InvalidOperation
 from django.conf import settings
+from django.db import transaction
 from django.utils.text import slugify
 from djmoney.money import Money
 from rest_framework import serializers
 from orders.models import Order, OrderItem
+from media_storage.services.upload import (
+    InvalidImageError, delete_image, upload_image, validate_image_bytes,
+)
+from media_storage.services.image_url_builder import DEFAULT_SRC_WIDTH, build_srcset, build_url
 from .models import (
     AxisValue, Product, ProductAxis, ProductImage, Collection, Review, Variant,
     VariantAxisValue,
@@ -31,9 +36,43 @@ class CollectionSerializer(serializers.ModelSerializer):
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(write_only=True)
+    axis_value = serializers.PrimaryKeyRelatedField(
+        queryset=AxisValue.objects.all(), required=False, allow_null=True,
+        write_only=True)
+    variant = serializers.PrimaryKeyRelatedField(
+        queryset=Variant.objects.all(), required=False, allow_null=True,
+        write_only=True)
+    position = serializers.IntegerField(source='sort_order', required=False)
+    object_key = serializers.CharField(source='image_key', read_only=True)
+    aspect_ratio = serializers.ReadOnlyField()
+    role = serializers.ReadOnlyField()
+    product_id = serializers.IntegerField(read_only=True)
+    variant_id = serializers.IntegerField(read_only=True)
+    axis_value_id = serializers.IntegerField(read_only=True)
+    src = serializers.SerializerMethodField()
+    srcset = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductImage
-        fields = ['id', 'image', 'alt_text', 'sort_order', 'axis_value', 'variant']
+        fields = ['id', 'image', 'alt_text', 'position', 'object_key',
+                  'aspect_ratio', 'role', 'product_id', 'variant_id',
+                  'axis_value_id', 'src', 'srcset', 'axis_value', 'variant']
+
+    def get_src(self, obj):
+        return build_url(obj.image_key, width=DEFAULT_SRC_WIDTH)
+
+    def get_srcset(self, obj):
+        return build_srcset(obj.image_key)
+
+    def validate_image(self, image_file):
+        data = image_file.read()
+        image_file.seek(0)
+        try:
+            validate_image_bytes(data)
+        except InvalidImageError as e:
+            raise serializers.ValidationError(str(e))
+        return image_file
 
     def validate_axis_value(self, axis_value):
         # An image tagged to a swatch must be a value of an axis on this
@@ -63,7 +102,29 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         product_id = self.context['product_id']
-        return ProductImage.objects.create(product_id=product_id, **validated_data)
+        image_file = validated_data.pop('image')
+        variant = validated_data.get('variant')
+        result = upload_image(
+            image_file, product_id=product_id,
+            variant_id=variant.id if variant else None)
+        return ProductImage.objects.create(
+            product_id=product_id, image_key=result.key,
+            width=result.width, height=result.height, **validated_data)
+
+    def update(self, instance, validated_data):
+        image_file = validated_data.pop('image', None)
+        if image_file is not None:
+            old_key = instance.image_key
+            variant = validated_data.get('variant', instance.variant)
+            result = upload_image(
+                image_file, product_id=instance.product_id,
+                variant_id=variant.id if variant else None)
+            instance.image_key = result.key
+            instance.width = result.width
+            instance.height = result.height
+            instance.save(update_fields=['image_key', 'width', 'height'])
+            delete_image(old_key)
+        return super().update(instance, validated_data)
 
 
 class SimpleProductSerializer(serializers.ModelSerializer):
@@ -93,6 +154,7 @@ class VariantSerializer(serializers.ModelSerializer):
     price_with_tax = serializers.SerializerMethodField()
     in_stock = serializers.BooleanField(read_only=True)
     axis_values = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
     # Write side: exactly one AxisValue id per axis defined on the parent
     # product. Named distinctly from the read-only `axis_values` above so
     # input/output don't collide on shape (ids in, expanded objects out).
@@ -105,7 +167,8 @@ class VariantSerializer(serializers.ModelSerializer):
         model = Variant
         fields = ['id', 'sku', 'unit_price', 'price_with_tax',
                   'compare_at_price', 'weight', 'track_inventory',
-                  'inventory', 'in_stock', 'axis_values', 'axis_value_ids']
+                  'inventory', 'in_stock', 'axis_values', 'images',
+                  'axis_value_ids']
 
     def get_price_with_tax(self, variant: Variant):
         return variant.unit_price.amount * Decimal(1.1)
@@ -114,6 +177,9 @@ class VariantSerializer(serializers.ModelSerializer):
         return VariantAxisValueSerializer(
             variant.axis_values.select_related('axis_value__axis'),
             many=True).data
+
+    def get_images(self, variant: Variant):
+        return ProductImageSerializer(variant.images.all(), many=True).data
 
     def _resolve_axis_values(self, product_id, axis_values):
         """Business Rule (Catalog): a variant must select exactly one
@@ -190,9 +256,14 @@ class SimpleVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductAxisValueSerializer(serializers.ModelSerializer):
+    images = serializers.SerializerMethodField()
+
     class Meta:
         model = AxisValue
-        fields = ['id', 'name', 'code']
+        fields = ['id', 'name', 'code', 'images']
+
+    def get_images(self, axis_value):
+        return ProductImageSerializer(axis_value.images.all(), many=True).data
 
 
 class ProductAxisSerializer(serializers.ModelSerializer):
@@ -218,7 +289,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     is_available = serializers.BooleanField(read_only=True)
     in_stock = serializers.BooleanField(read_only=True)
-    images = ProductImageSerializer(many=True, read_only=True)
+    images = serializers.SerializerMethodField()
     # Variants are display-only here — creation/update goes through the
     # products/{id}/variants/ sub-resource only (product+axes must exist
     # first), never through this payload.
@@ -227,6 +298,10 @@ class ProductSerializer(serializers.ModelSerializer):
     # Auto-generated from title (like admin's prepopulated_fields) — never
     # accepted from the client.
     slug = serializers.SlugField(read_only=True)
+
+    def get_images(self, product):
+        gallery = [img for img in product.images.all() if img.role == 'PRODUCT_GALLERY']
+        return ProductImageSerializer(gallery, many=True).data
 
     def create(self, validated_data):
         axes_data = validated_data.pop('axes', [])
@@ -322,29 +397,49 @@ class CreateProductSerializer(serializers.Serializer):
         parsed['_currency'] = currency
         return parsed
 
+    def validate_images(self, images):
+        for image_file in images:
+            data = image_file.read()
+            image_file.seek(0)
+            try:
+                validate_image_bytes(data)
+            except InvalidImageError as e:
+                raise serializers.ValidationError(str(e))
+        return images
+
     def create(self, validated_data):
-        data = validated_data['data']
-        images = validated_data['images']
+        with transaction.atomic():
+            data = validated_data['data']
+            images = validated_data['images']
 
-        product = Product.objects.create(
-            title=data['_title'],
-            slug=unique_slug_from(data['_title']),
-            price=Money(data['_amount'], data['_currency']))
+            product = Product.objects.create(
+                title=data['_title'],
+                slug=unique_slug_from(data['_title']),
+                price=Money(data['_amount'], data['_currency']))
 
-        for axis in data['axes']:
-            axis_obj = ProductAxis.objects.create(
-                product=product, name=axis['name'].strip(),
-                sort_order=axis.get('sortOrder', 0))
-            for value in axis['allowedValues']:
-                AxisValue.objects.create(
-                    axis=axis_obj, name=value['name'].strip(),
-                    code=value.get('code', ''))
+            for axis in data['axes']:
+                axis_obj = ProductAxis.objects.create(
+                    product=product, name=axis['name'].strip(),
+                    sort_order=axis.get('sortOrder', 0))
+                for value in axis['allowedValues']:
+                    AxisValue.objects.create(
+                        axis=axis_obj, name=value['name'].strip(),
+                        code=value.get('code', ''))
 
-        ProductImage.objects.bulk_create([
-            ProductImage(product=product, image=image, sort_order=i)
-            for i, image in enumerate(images)
-        ])
-        return product
+            # bulk_create can't run per-row I/O — upload each file first
+            # (sequentially; there's no async story here), then insert the
+            # rows in one bulk statement with the resulting keys/dimensions.
+            upload_results = [
+                upload_image(image, product_id=product.id)
+                for image in images
+            ]
+            ProductImage.objects.bulk_create([
+                ProductImage(product=product, image_key=result.key,
+                             width=result.width, height=result.height,
+                             sort_order=i)
+                for i, result in enumerate(upload_results)
+            ])
+            return product
 
 
 class ReviewSerializer(serializers.ModelSerializer):

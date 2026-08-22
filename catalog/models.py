@@ -1,3 +1,4 @@
+import math
 from decimal import Decimal
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -195,9 +196,16 @@ class VariantAxisValue(models.Model):
 class ProductImage(models.Model):
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='products')
+    image_key = models.CharField(max_length=512)
     alt_text = models.CharField(max_length=255, blank=True)
     sort_order = models.PositiveIntegerField(default=0)
+    # Pixel dimensions captured at upload time (see media_storage.upload_image) —
+    # null for rows created before this field existed; drives aspect_ratio.
+    width = models.PositiveIntegerField(null=True, blank=True)
+    height = models.PositiveIntegerField(null=True, blank=True)
+    # Plain flag, no uniqueness constraint — multiple images per product may
+    # be marked hero. Not exposed in any serializer output yet.
+    is_hero = models.BooleanField(default=False)
     # Set only on an "image-bearing axis" (typically Color) — this photo
     # belongs to that specific swatch and is swapped in when the shopper
     # picks it. Null = an ordinary, axis-independent product photo.
@@ -206,15 +214,34 @@ class ProductImage(models.Model):
         related_name='images')
     # Set to override the product/swatch gallery for one specific variant
     # (e.g. this exact SKU photographed on a model). Mutually exclusive
-    # with axis_value — enforced in ProductImageSerializer, not the
-    # schema — same "polymorphic-by-owner, business rule in code" pattern
-    # as VariantAxisValue.
+    # with axis_value — enforced both here (DB) and in
+    # ProductImageSerializer.validate (early, friendlier error).
     variant = models.ForeignKey(
         Variant, on_delete=models.CASCADE, null=True, blank=True,
         related_name='images')
 
     class Meta:
         ordering = ['sort_order', 'id']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(axis_value__isnull=True) | models.Q(variant__isnull=True),
+                name='productimage_axis_value_or_variant_not_both'),
+        ]
+
+    @property
+    def role(self) -> str:
+        if self.variant_id:
+            return 'VARIANT_OVERRIDE'
+        if self.axis_value_id:
+            return 'AXIS_VALUE_GALLERY'
+        return 'PRODUCT_GALLERY'
+
+    @property
+    def aspect_ratio(self) -> str | None:
+        if not self.width or not self.height:
+            return None
+        divisor = math.gcd(self.width, self.height)
+        return f'{self.width // divisor}:{self.height // divisor}'
 
 
 class Review(models.Model):

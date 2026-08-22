@@ -12,6 +12,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from core.pagination import DefaultPagination
 from customers.models import Customer
+from media_storage.services.upload import delete_image
 from .filters import ProductFilter
 from .models import Collection, Product, ProductImage, Review, Variant
 from .serializers import (
@@ -34,7 +35,8 @@ class ProductViewSet(ReadOnlyModelViewSet):
     # distinct(): filtering/ordering crosses the Product->Variant relation
     # now (price lives on Variant), which can otherwise duplicate a Product
     # row per matching variant.
-    queryset = Product.objects.all().distinct()
+    queryset = Product.objects.all().distinct().prefetch_related(
+        'images', 'variants__images', 'axes__values__images')
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ProductFilter
@@ -76,7 +78,8 @@ class ProductViewSet(ReadOnlyModelViewSet):
 )
 class ProductAdminViewSet(ModelViewSet):
     """store-admin/: full CRUD, staff-only."""
-    queryset = Product.objects.all().distinct()
+    queryset = Product.objects.all().distinct().prefetch_related(
+        'images', 'variants__images', 'axes__values__images')
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ProductFilter
@@ -214,6 +217,10 @@ class ProductImageAdminViewSet(ModelViewSet):
 
     def get_serializer_context(self):
         return {'product_id': self.kwargs['product_pk']}
+
+    def perform_destroy(self, instance):
+        delete_image(instance.image_key)
+        instance.delete()
 
 
 @extend_schema_view(
