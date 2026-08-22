@@ -154,6 +154,7 @@ class VariantSerializer(serializers.ModelSerializer):
     price_with_tax = serializers.SerializerMethodField()
     in_stock = serializers.BooleanField(read_only=True)
     axis_values = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
     # Write side: exactly one AxisValue id per axis defined on the parent
     # product. Named distinctly from the read-only `axis_values` above so
     # input/output don't collide on shape (ids in, expanded objects out).
@@ -166,7 +167,8 @@ class VariantSerializer(serializers.ModelSerializer):
         model = Variant
         fields = ['id', 'sku', 'unit_price', 'price_with_tax',
                   'compare_at_price', 'weight', 'track_inventory',
-                  'inventory', 'in_stock', 'axis_values', 'axis_value_ids']
+                  'inventory', 'in_stock', 'axis_values', 'images',
+                  'axis_value_ids']
 
     def get_price_with_tax(self, variant: Variant):
         return variant.unit_price.amount * Decimal(1.1)
@@ -175,6 +177,9 @@ class VariantSerializer(serializers.ModelSerializer):
         return VariantAxisValueSerializer(
             variant.axis_values.select_related('axis_value__axis'),
             many=True).data
+
+    def get_images(self, variant: Variant):
+        return ProductImageSerializer(variant.images.all(), many=True).data
 
     def _resolve_axis_values(self, product_id, axis_values):
         """Business Rule (Catalog): a variant must select exactly one
@@ -251,9 +256,14 @@ class SimpleVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductAxisValueSerializer(serializers.ModelSerializer):
+    images = serializers.SerializerMethodField()
+
     class Meta:
         model = AxisValue
-        fields = ['id', 'name', 'code']
+        fields = ['id', 'name', 'code', 'images']
+
+    def get_images(self, axis_value):
+        return ProductImageSerializer(axis_value.images.all(), many=True).data
 
 
 class ProductAxisSerializer(serializers.ModelSerializer):
@@ -279,7 +289,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     is_available = serializers.BooleanField(read_only=True)
     in_stock = serializers.BooleanField(read_only=True)
-    images = ProductImageSerializer(many=True, read_only=True)
+    images = serializers.SerializerMethodField()
     # Variants are display-only here — creation/update goes through the
     # products/{id}/variants/ sub-resource only (product+axes must exist
     # first), never through this payload.
@@ -288,6 +298,10 @@ class ProductSerializer(serializers.ModelSerializer):
     # Auto-generated from title (like admin's prepopulated_fields) — never
     # accepted from the client.
     slug = serializers.SlugField(read_only=True)
+
+    def get_images(self, product):
+        gallery = [img for img in product.images.all() if img.role == 'PRODUCT_GALLERY']
+        return ProductImageSerializer(gallery, many=True).data
 
     def create(self, validated_data):
         axes_data = validated_data.pop('axes', [])

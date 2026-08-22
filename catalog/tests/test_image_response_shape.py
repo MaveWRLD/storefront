@@ -93,3 +93,42 @@ class TestImageResponseShape:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data['position'] == 3
         assert 'sort_order' not in response.data
+
+
+@pytest.mark.django_db
+class TestImageNestingByRole:
+    def test_product_images_excludes_axis_value_and_variant_tagged(self, product):
+        axis = ProductAxis.objects.create(product=product, name='Color')
+        red = AxisValue.objects.create(axis=axis, name='Red', code='red')
+        variant = Variant.objects.create(product=product, sku='test-s', unit_price=1000)
+        ProductImage.objects.create(product=product, image_key='plain.png')
+        ProductImage.objects.create(product=product, image_key='axis.png', axis_value=red)
+        ProductImage.objects.create(product=product, image_key='variant.png', variant=variant)
+
+        from catalog.serializers import ProductSerializer
+        data = ProductSerializer(product).data
+
+        assert [img['object_key'] for img in data['images']] == ['plain.png']
+
+    def test_variant_serializer_exposes_only_its_own_images(self, product):
+        variant = Variant.objects.create(product=product, sku='test-s', unit_price=1000)
+        other_variant = Variant.objects.create(product=product, sku='test-l', unit_price=1000)
+        ProductImage.objects.create(product=product, image_key='mine.png', variant=variant)
+        ProductImage.objects.create(product=product, image_key='not-mine.png', variant=other_variant)
+
+        from catalog.serializers import VariantSerializer
+        data = VariantSerializer(variant).data
+
+        assert [img['object_key'] for img in data['images']] == ['mine.png']
+
+    def test_axis_value_serializer_exposes_only_its_own_images(self, product):
+        axis = ProductAxis.objects.create(product=product, name='Color')
+        red = AxisValue.objects.create(axis=axis, name='Red', code='red')
+        blue = AxisValue.objects.create(axis=axis, name='Blue', code='blue')
+        ProductImage.objects.create(product=product, image_key='red.png', axis_value=red)
+        ProductImage.objects.create(product=product, image_key='blue.png', axis_value=blue)
+
+        from catalog.serializers import ProductAxisValueSerializer
+        data = ProductAxisValueSerializer(red).data
+
+        assert [img['object_key'] for img in data['images']] == ['red.png']
