@@ -48,12 +48,12 @@ class Order(models.Model):
     customer = models.ForeignKey(
         'customers.Customer', on_delete=models.PROTECT, null=True, blank=True)
     subtotal = MoneyField(
-        max_digits=10, decimal_places=2, default_currency='USD',
+        max_digits=10, decimal_places=2, default_currency='GHS',
         default=0)
     # Set from the shipping rate quote selected at checkout (shipping app,
     # 004-shipping-integration). Stays 0 for pickup-method orders.
     shipping_cost = MoneyField(
-        max_digits=10, decimal_places=2, default_currency='USD',
+        max_digits=10, decimal_places=2, default_currency='GHS',
         default=0)
     # The recipient contact + delivery address, persisted so booking
     # (shipping/services.py:book_shipment_for_order) can re-send it once
@@ -106,4 +106,4 @@ class OrderItem(models.Model):
     variant = models.ForeignKey(
         'catalog.Variant', on_delete=models.PROTECT, related_name='orderitems')
     quantity = models.PositiveSmallIntegerField()
-    unit_price = MoneyField(max_digits=6, decimal_places=2, default_currency='USD')
+    unit_price = MoneyField(max_digits=6, decimal_places=2, default_currency='GHS')

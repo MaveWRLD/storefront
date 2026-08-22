@@ -30,7 +30,7 @@ class Payment(models.Model):
         'orders.Order', on_delete=models.PROTECT, related_name='payments')
     # Our own idempotency key, sent to the gateway as its transaction reference.
     reference = models.CharField(max_length=100, unique=True)
-    amount = MoneyField(max_digits=10, decimal_places=2, default_currency='USD')
+    amount = MoneyField(max_digits=10, decimal_places=2, default_currency='GHS')
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
     # Which gateway implementation (payment/gateways/) this reference
