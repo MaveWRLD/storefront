@@ -17,6 +17,7 @@ django-money = "*"
 pillow = "*"
 drf-spectacular = "*"
 django-cors-headers = "*"
+python-magic = "*"
 
 [dev-packages]
 autopep8 = "*"
