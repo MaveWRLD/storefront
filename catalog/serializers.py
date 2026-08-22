@@ -284,6 +284,46 @@ class ProductAxisSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'sort_order', 'values']
 
 
+class ProductImageListSerializer(serializers.ModelSerializer):
+    """Slim image shape for ProductListSerializer — the list table only
+    ever renders the first gallery image, and only its src/alt_text."""
+    src = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductImage
+        fields = ['src', 'alt_text']
+
+    def get_src(self, obj):
+        return build_url(obj.image_key, width=DEFAULT_SRC_WIDTH)
+
+
+class VariantListSerializer(serializers.ModelSerializer):
+    """Slim variant shape for ProductListSerializer — just what the list
+    table's price column needs (low-stock calc uses total_stock instead)."""
+    class Meta:
+        model = Variant
+        fields = ['unit_price', 'track_inventory']
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    """Trimmed shape for the products list table (admin dashboard) — drops
+    everything list.tsx doesn't render (description, slug, top-level price,
+    is_available/in_stock, axes, and most variant/image fields) so the list
+    response doesn't ship the full detail payload for every row."""
+    class Meta:
+        model = Product
+        fields = ['id', 'title', 'collection', 'status', 'total_stock',
+                  'images', 'variants']
+
+    total_stock = serializers.IntegerField(read_only=True)
+    images = serializers.SerializerMethodField()
+    variants = VariantListSerializer(many=True, read_only=True)
+
+    def get_images(self, product):
+        gallery = [img for img in product.images.all() if img.role == 'PRODUCT_GALLERY']
+        return ProductImageListSerializer(gallery, many=True).data
+
+
 class ProductSerializer(serializers.ModelSerializer):
     """Read/plain-update shape. Creation goes through
     CreateProductSerializer instead (see ProductAdminViewSet.create) — this
@@ -292,11 +332,12 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = ['id', 'title', 'description', 'slug', 'collection', 'price',
-                  'status', 'is_available', 'in_stock', 'images',
-                  'variants', 'axes']
+                  'status', 'is_available', 'in_stock', 'total_stock',
+                  'images', 'variants', 'axes']
 
     is_available = serializers.BooleanField(read_only=True)
     in_stock = serializers.BooleanField(read_only=True)
+    total_stock = serializers.IntegerField(read_only=True)
     images = serializers.SerializerMethodField()
     # Variants are display-only here — creation/update goes through the
     # products/{id}/variants/ sub-resource only (product+axes must exist
