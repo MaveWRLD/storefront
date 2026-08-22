@@ -6,6 +6,7 @@ from rest_framework.mixins import (
 )
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.viewsets import GenericViewSet
 from customers.models import Customer
 from .models import Order
@@ -36,11 +37,20 @@ class OrderViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, Generic
             return [AllowAny()]
         return [IsAuthenticated()]
 
+    def get_throttles(self):
+        # IP-keyed, matching Spring's 20/min on guest order lookup/retrieve
+        # (gap-analysis doc: 'No rate limiting anywhere') — enumeration by
+        # order id + guessed email is exactly what this endpoint is open to.
+        if self.action == 'lookup':
+            self.throttle_scope = 'order-lookup'
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
+
     def create(self, request, *args, **kwargs):
         user = request.user if request.user.is_authenticated else None
         serializer = CreateOrderSerializer(
             data=request.data,
-            context={'user': user})
+            context={'user': user, 'request': request})
         serializer.is_valid(raise_exception=True)
         order = serializer.save()
         serializer = OrderSerializer(order)

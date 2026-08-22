@@ -8,15 +8,35 @@ from .models import Cart, CartItem
 
 
 class CartItemSerializer(serializers.ModelSerializer):
+    STATUS_ACTIVE = 'ACTIVE'
+    STATUS_UNAVAILABLE = 'UNAVAILABLE'
+
     variant = SimpleVariantSerializer()
     total_price = serializers.SerializerMethodField()
+    price_changed = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     def get_total_price(self, cart_item: CartItem):
         return (cart_item.quantity * cart_item.variant.unit_price).amount
 
+    def get_price_changed(self, cart_item: CartItem):
+        # No baseline (line added before this field existed) — nothing
+        # to compare against, so report unchanged rather than guess.
+        if cart_item.price_at_add is None:
+            return False
+        return cart_item.price_at_add != cart_item.variant.unit_price
+
+    def get_status(self, cart_item: CartItem):
+        variant = cart_item.variant
+        in_stock = not variant.track_inventory or variant.available >= cart_item.quantity
+        if variant.product.is_available and in_stock:
+            return self.STATUS_ACTIVE
+        return self.STATUS_UNAVAILABLE
+
     class Meta:
         model = CartItem
-        fields = ['id', 'variant', 'quantity', 'total_price']
+        fields = ['id', 'variant', 'quantity', 'total_price',
+                  'price_changed', 'status']
 
 
 class CartSerializer(serializers.ModelSerializer):
@@ -60,9 +80,9 @@ class AddCartItemSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'This product is not available for purchase.')
 
-        cart_id = self.context['cart_id']
+        cart = self.context['cart']
         already_in_cart = CartItem.objects.filter(
-            cart_id=cart_id, variant_id=variant.id
+            cart=cart, variant_id=variant.id
         ).values_list('quantity', flat=True).first() or 0
 
         if variant.track_inventory and (
@@ -73,23 +93,25 @@ class AddCartItemSerializer(serializers.ModelSerializer):
         return data
 
     def save(self, **kwargs):
-        cart_id = self.context['cart_id']
+        cart = self.context['cart']
         variant_id = self.validated_data['variant_id']
         quantity = self.validated_data['quantity']
 
         try:
             cart_item = CartItem.objects.get(
-                cart_id=cart_id, variant_id=variant_id)
+                cart=cart, variant_id=variant_id)
             cart_item.quantity += quantity
             cart_item.save()
             self.instance = cart_item
         except CartItem.DoesNotExist:
+            variant = Variant.objects.get(pk=variant_id)
             self.instance = CartItem.objects.create(
-                cart_id=cart_id, **self.validated_data)
+                cart=cart, price_at_add=variant.unit_price,
+                **self.validated_data)
 
         # Business Rule (Checkout): 'Abandoned checkout preserves the cart' —
         # touch the cart so its TTL clock (last_activity) resets on activity.
-        Cart.objects.filter(pk=cart_id).update(last_activity=timezone.now())
+        Cart.objects.filter(pk=cart.pk).update(last_activity=timezone.now())
 
         return self.instance
 

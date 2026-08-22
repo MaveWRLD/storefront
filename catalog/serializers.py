@@ -18,7 +18,17 @@ class CollectionSerializer(serializers.ModelSerializer):
 class ProductImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductImage
-        fields = ['id', 'image', 'alt_text', 'sort_order']
+        fields = ['id', 'image', 'alt_text', 'sort_order', 'axis_value']
+
+    def validate_axis_value(self, axis_value):
+        # An image tagged to a swatch must be a value of an axis on this
+        # same product — otherwise it could claim to swap in for a color
+        # that has nothing to do with the product it's a photo of.
+        product_id = self.context['product_id']
+        if not axis_value.axis.product_id == int(product_id):
+            raise serializers.ValidationError(
+                'This axis value does not belong to this product.')
+        return axis_value
 
     def create(self, validated_data):
         product_id = self.context['product_id']

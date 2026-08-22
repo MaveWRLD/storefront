@@ -34,9 +34,12 @@ def make_order(variant):
             customer=customer,
         )
         if customer is None:
-            defaults.update(
-                guest_name='Guest', guest_email='guest@example.com',
-                guest_phone='0800000000')
+            defaults.update(shipping_address={
+                'recipient_name': 'Guest', 'email': 'guest@example.com',
+                'phone': '0800000000', 'street_address': '1 Test St',
+                'city': 'Accra', 'region': 'Greater Accra',
+                'coordinates': {'lat': 5.6, 'lng': -0.2},
+            })
         defaults.update(kwargs)
         order = Order.objects.create(**defaults)
         item = OrderItem.objects.create(

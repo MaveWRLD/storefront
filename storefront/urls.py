@@ -23,7 +23,16 @@ from drf_spectacular.views import (
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
+from rest_framework.routers import DefaultRouter
 import debug_toolbar
+from core import views as core_views
+
+# Overrides djoser.urls' own 'users' router registration (djoser/urls/base.py)
+# with a subclass that throttles registration only — must come before the
+# djoser.urls include below, same reasoning as the jwt/create override.
+_throttled_users_router = DefaultRouter()
+_throttled_users_router.register(
+    'users', core_views.ThrottledUserViewSet, basename='user')
 
 admin.site.site_header = 'Storefront Admin'
 admin.site.index_title = 'Admin'
@@ -34,7 +43,7 @@ def store_api_root(request, format=None):
     return Response({
         'products': reverse('products-list', request=request, format=format),
         'collections': reverse('collections-list', request=request, format=format),
-        'carts': reverse('cart-list', request=request, format=format),
+        'cart': reverse('cart-detail', request=request, format=format),
         'customers': reverse('customers-me', request=request, format=format),
         'orders': reverse('orders-list', request=request, format=format),
     })
@@ -48,16 +57,25 @@ urlpatterns = [
     path('store-front/', include('customers.urls_front')),
     path('store-front/', include('orders.urls_front')),
     path('store-front/', include('payment.urls')),
+    path('store-front/', include('shipping.urls')),
     path('store-front/', include('returns.urls_front')),
     path('store-admin/', include('catalog.urls_admin')),
     path('store-admin/', include('customers.urls_admin')),
     path('store-admin/', include('orders.urls_admin')),
     path('store-admin/', include('returns.urls_admin')),
+    path('store-admin/', include('shipping.urls_admin')),
     path('store-admin/', include('reports.urls')),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    path('auth/', include(_throttled_users_router.urls)),
     path('auth/', include('djoser.urls')),
+    # Overrides djoser.urls.jwt's auth/jwt/create/ with a version that also
+    # merges the guest session's cart on login (core/views.py) — must come
+    # before the djoser.urls.jwt include below, which is only reached for
+    # jwt/refresh/, jwt/verify/, etc.
+    path('auth/jwt/create/', core_views.CartMergingTokenObtainPairView.as_view(),
+         name='jwt-create-with-cart-merge'),
     path('auth/', include('djoser.urls.jwt')),
     path('__debug__/', include(debug_toolbar.urls)),
 ]

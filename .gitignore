@@ -183,3 +183,6 @@ cython_debug/
 
 docs
 .specify
+
+# spec-kit planning docs — local only, not tracked
+specs/

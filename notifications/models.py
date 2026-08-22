@@ -12,14 +12,18 @@ class Notification(models.Model):
     """
     EVENT_ORDER_CONFIRMED = 'ORDER_CONFIRMED'
     EVENT_READY_FOR_PICKUP = 'READY_FOR_PICKUP'
+    EVENT_SHIPMENT_DISPATCHED = 'SHIPMENT_DISPATCHED'
     EVENT_OUT_FOR_DELIVERY = 'OUT_FOR_DELIVERY'
     EVENT_DELIVERED = 'DELIVERED'
+    EVENT_DELIVERY_FAILED = 'DELIVERY_FAILED'
     EVENT_REFUND_DECISION = 'REFUND_DECISION'
     EVENT_CHOICES = [
         (EVENT_ORDER_CONFIRMED, 'Order Confirmed'),
         (EVENT_READY_FOR_PICKUP, 'Ready for Pickup'),
+        (EVENT_SHIPMENT_DISPATCHED, 'Shipment Dispatched'),
         (EVENT_OUT_FOR_DELIVERY, 'Out for Delivery'),
         (EVENT_DELIVERED, 'Delivered'),
+        (EVENT_DELIVERY_FAILED, 'Delivery Failed'),
         (EVENT_REFUND_DECISION, 'Refund Decision'),
     ]
 

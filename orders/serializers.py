@@ -1,11 +1,15 @@
+from django.conf import settings
 from django.db import models, transaction
+from djmoney.money import Money
 from rest_framework import serializers
-from cart.models import Cart, CartItem
+from cart.models import CartItem
+from cart.services import CART_SESSION_KEY, get_current_cart
 from catalog.models import Variant
 from catalog.serializers import SimpleVariantSerializer
 from customers.models import Customer
 from notifications.models import Notification
 from notifications.services import notify
+from shipping.serializers import AddressSerializer
 from .models import Order, OrderItem
 from .signals import order_created
 
@@ -37,12 +41,28 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True)
     unavailable_items = serializers.SerializerMethodField()
+    # No direct model fields for these anymore — Order.get_email() already
+    # knows how to pick between shipping_address and the account; name has
+    # the same split, just inlined here (no model-level equivalent of
+    # get_email() worth adding for one caller).
+    name = serializers.SerializerMethodField()
+    email = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
-        fields = ['id', 'customer', 'guest_name', 'guest_email',
+        fields = ['id', 'customer', 'name', 'email',
                   'fulfillment_method', 'placed_at', 'payment_status', 'status',
-                  'items', 'unavailable_items']
+                  'subtotal', 'items', 'unavailable_items']
+
+    def get_name(self, order):
+        if order.shipping_address and order.shipping_address.get('recipient_name'):
+            return order.shipping_address['recipient_name']
+        if order.customer_id:
+            return f'{order.customer.user.first_name} {order.customer.user.last_name}'.strip()
+        return ''
+
+    def get_email(self, order):
+        return order.get_email()
 
     def get_unavailable_items(self, order):
         # Not persisted (US-09): the checkout-time stock re-check drops these
@@ -186,33 +206,35 @@ class UpdateOrderSerializer(serializers.ModelSerializer):
 class CreateOrderSerializer(serializers.Serializer):
     """Places an order from a cart.
 
-    Adapted from Saleor's checkout-completion pattern (a Checkout with no
-    `user` set still carries `email`, so completing it doesn't require an
-    account): an authenticated request resolves its Customer as before;
-    an anonymous request must supply guest contact details instead.
+    Order carries no contact fields of its own — `address` (reusing
+    shipping.AddressSerializer's shape: recipient_name, email, phone,
+    street_address, city, region, ghana_post_gps, coordinates) is the
+    only place a guest's identity lives, and it's required for ANY
+    guest checkout regardless of fulfillment method, not just DELIVERY.
+    An authenticated request only needs it for DELIVERY (the account is
+    identity enough for PICKUP); if given anyway, it's stored the same
+    way, e.g. a customer shipping to someone else.
     """
-    cart_id = serializers.UUIDField()
     fulfillment_method = serializers.ChoiceField(
         choices=Order.FULFILLMENT_METHOD_CHOICES)
-    guest_name = serializers.CharField(required=False, allow_blank=True)
-    guest_email = serializers.EmailField(required=False)
-    guest_phone = serializers.CharField(
-        required=False, allow_blank=True, max_length=32)
-
-    def validate_cart_id(self, cart_id):
-        if not Cart.objects.filter(pk=cart_id).exists():
-            raise serializers.ValidationError(
-                'No cart with the given ID was found.')
-        if CartItem.objects.filter(cart_id=cart_id).count() == 0:
-            raise serializers.ValidationError('The cart is empty.')
-        return cart_id
+    address = AddressSerializer(required=False)
 
     def validate(self, data):
         user = self.context.get('user')
-        if user is None or not user.is_authenticated:
-            if not data.get('guest_name') or not data.get('guest_email'):
-                raise serializers.ValidationError(
-                    'Guest checkout requires guest_name and guest_email.')
+        is_guest = user is None or not user.is_authenticated
+        address_required = is_guest or data['fulfillment_method'] == Order.FULFILLMENT_DELIVERY
+        if address_required and not data.get('address'):
+            message = ('Guest checkout requires an address.' if is_guest else
+                       'A delivery order requires an address.')
+            raise serializers.ValidationError(message)
+
+        # The cart is never passed in by the client — it's resolved the same
+        # way cart/views.py resolves it: the authenticated user's cart, or
+        # the guest session's cart_id (cart/services.py).
+        cart = get_current_cart(self.context['request'])
+        if cart is None:
+            raise serializers.ValidationError(
+                'No cart with the given ID was found.')
 
         # Business Rule (Warehouse): 'Stock re-validated at checkout, not
         # just add-to-cart' (US-09). Adapted from Saleor's
@@ -223,7 +245,10 @@ class CreateOrderSerializer(serializers.Serializer):
         cart_items = list(
             CartItem.objects
             .select_related('variant__product')
-            .filter(cart_id=data['cart_id']))
+            .filter(cart=cart))
+        if not cart_items:
+            raise serializers.ValidationError('The cart is empty.')
+
         available, unavailable = [], []
         for item in cart_items:
             variant = item.variant
@@ -237,6 +262,7 @@ class CreateOrderSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'None of the items in your cart are currently available.')
 
+        data['_cart'] = cart
         data['_available_items'] = available
         data['_unavailable_items'] = unavailable
         return data
@@ -245,18 +271,15 @@ class CreateOrderSerializer(serializers.Serializer):
         with transaction.atomic():
             user = self.context.get('user')
             fulfillment_method = self.validated_data['fulfillment_method']
+            shipping_address = self.validated_data.get('address')
 
+            customer = None
             if user is not None and user.is_authenticated:
                 customer = Customer.objects.get(user_id=user.id)
-                order = Order.objects.create(
-                    customer=customer, fulfillment_method=fulfillment_method)
-            else:
-                order = Order.objects.create(
-                    fulfillment_method=fulfillment_method,
-                    guest_name=self.validated_data.get('guest_name', ''),
-                    guest_email=self.validated_data.get('guest_email', ''),
-                    guest_phone=self.validated_data.get('guest_phone', ''),
-                )
+
+            order = Order.objects.create(
+                customer=customer, fulfillment_method=fulfillment_method,
+                shipping_address=shipping_address)
 
             available_items = self.validated_data['_available_items']
             unavailable_items = self.validated_data['_unavailable_items']
@@ -295,7 +318,18 @@ class CreateOrderSerializer(serializers.Serializer):
 
             OrderItem.objects.bulk_create(order_items)
 
-            Cart.objects.filter(pk=self.validated_data['cart_id']).delete()
+            order.subtotal = sum(
+                (item.quantity * item.unit_price for item in order_items),
+                start=Money(0, settings.DEFAULT_CURRENCY)
+            )
+            order.save(update_fields=['subtotal'])
+
+            cart = self.validated_data['_cart']
+            cart.delete()
+            # The cart's gone — drop the guest session's pointer to it too,
+            # same as cart/services.py.merge_cart_into_user does on login,
+            # so the next request doesn't chase a deleted cart id.
+            self.context['request'].session.pop(CART_SESSION_KEY, None)
 
             order_created.send_robust(self.__class__, order=order)
 
@@ -317,9 +351,13 @@ class GuestOrderLookupSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate(self, data):
+        # customer__isnull=True: this is guest lookup specifically — an
+        # authenticated customer's order shouldn't become findable by
+        # guessing whatever email they happened to put in shipping_address.
         try:
             order = Order.objects.get(
-                pk=data['order_id'], guest_email__iexact=data['email'])
+                pk=data['order_id'], customer__isnull=True,
+                shipping_address__email__iexact=data['email'])
         except Order.DoesNotExist:
             raise serializers.ValidationError(
                 'No matching guest order was found.')
