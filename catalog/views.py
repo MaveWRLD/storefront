@@ -8,6 +8,7 @@ from rest_framework.viewsets import ModelViewSet, ReadOnlyModelViewSet
 from rest_framework import status
 from core.pagination import DefaultPagination
 from customers.models import Customer
+from media_storage.services.upload import delete_image
 from .filters import ProductFilter
 from .models import Collection, Product, ProductImage, Review, Variant
 from .serializers import (
@@ -186,6 +187,10 @@ class ProductImageAdminViewSet(ModelViewSet):
 
     def get_serializer_context(self):
         return {'product_id': self.kwargs['product_pk']}
+
+    def perform_destroy(self, instance):
+        delete_image(instance.image_key)
+        instance.delete()
 
 
 @extend_schema_view(

@@ -2,6 +2,8 @@ from decimal import Decimal
 from django.utils.text import slugify
 from rest_framework import serializers
 from orders.models import Order, OrderItem
+from media_storage.services.upload import delete_image, upload_image
+from media_storage.services.image_url_builder import build_url
 from .models import (
     AxisValue, Product, ProductAxis, ProductImage, Collection, Review, Variant,
 )
@@ -16,6 +18,8 @@ class CollectionSerializer(serializers.ModelSerializer):
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(write_only=True)
+
     class Meta:
         model = ProductImage
         fields = ['id', 'image', 'alt_text', 'sort_order', 'axis_value']
@@ -32,7 +36,30 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         product_id = self.context['product_id']
-        return ProductImage.objects.create(product_id=product_id, **validated_data)
+        image_file = validated_data.pop('image')
+        variant = validated_data.get('variant')
+        image_key = upload_image(
+            image_file, product_id=product_id,
+            variant_id=variant.id if variant else None)
+        return ProductImage.objects.create(
+            product_id=product_id, image_key=image_key, **validated_data)
+
+    def update(self, instance, validated_data):
+        image_file = validated_data.pop('image', None)
+        if image_file is not None:
+            old_key = instance.image_key
+            variant = validated_data.get('variant', instance.variant)
+            instance.image_key = upload_image(
+                image_file, product_id=instance.product_id,
+                variant_id=variant.id if variant else None)
+            instance.save(update_fields=['image_key'])
+            delete_image(old_key)
+        return super().update(instance, validated_data)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        ret['image'] = build_url(instance.image_key)
+        return ret
 
 
 class SimpleProductSerializer(serializers.ModelSerializer):
