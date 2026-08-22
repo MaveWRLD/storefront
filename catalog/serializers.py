@@ -153,6 +153,10 @@ class VariantSerializer(serializers.ModelSerializer):
     endpoint (US-20/US-21) — there's no separate variant-management story yet."""
     price_with_tax = serializers.SerializerMethodField()
     in_stock = serializers.BooleanField(read_only=True)
+    # Real sellable stock (inventory - allocated; None when inventory isn't
+    # tracked) — raw `inventory` alone reads wrong once stock is allocated
+    # to pending orders (allocated bumps at checkout, before payment).
+    available = serializers.IntegerField(read_only=True, allow_null=True)
     axis_values = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
     # Write side: exactly one AxisValue id per axis defined on the parent
@@ -167,11 +171,15 @@ class VariantSerializer(serializers.ModelSerializer):
         model = Variant
         fields = ['id', 'sku', 'unit_price', 'price_with_tax',
                   'compare_at_price', 'weight', 'track_inventory',
-                  'inventory', 'in_stock', 'axis_values', 'images',
-                  'axis_value_ids']
+                  'inventory', 'available', 'in_stock', 'axis_values',
+                  'images', 'axis_value_ids']
 
     def get_price_with_tax(self, variant: Variant):
-        return variant.unit_price.amount * Decimal(1.1)
+        # Money math first (currency-aware, exact), .amount only at the
+        # output boundary — matches the pattern used everywhere else
+        # (cart/order/report totals). `Decimal(1.1)` from a float literal
+        # would carry float-precision error; `Decimal('1.1')` is exact.
+        return (variant.unit_price * Decimal('1.1')).amount
 
     def get_axis_values(self, variant: Variant):
         return VariantAxisValueSerializer(
