@@ -85,11 +85,10 @@ class TestAxisValueImages:
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_axis_value_images_appear_nested_under_the_value(self, red):
-        from django.core.files.uploadedfile import SimpleUploadedFile
         from catalog.models import ProductImage
         ProductImage.objects.create(
             product=red.axis.product,
-            image=SimpleUploadedFile('test.png', png_file().read()),
+            image_key='products/1/test.png',
             axis_value=red)
 
         assert red.images.count() == 1
