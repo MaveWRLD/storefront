@@ -28,8 +28,10 @@ class R2StorageBackend(StorageBackend):
         try:
             self._client.head_object(Bucket=self._bucket, Key=key)
             return True
-        except ClientError:
-            return False
+        except ClientError as e:
+            if e.response.get('Error', {}).get('Code') in ('404', 'NoSuchKey'):
+                return False
+            raise
 
     def public_url(self, key: str) -> str:
         return f"{self._public_domain.rstrip('/')}/{key}"

@@ -6,4 +6,6 @@ def build_url(key: str) -> str:
     yet. Kept as its own module (not a StorageBackend method) since URL
     transformation is a separate concern from storage I/O; local dev may
     never need transforms at all."""
+    if not key:
+        return ''
     return get_storage_backend().public_url(key)

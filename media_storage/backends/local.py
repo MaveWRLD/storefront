@@ -12,7 +12,10 @@ class LocalStorageBackend(StorageBackend):
         self._root.mkdir(parents=True, exist_ok=True)
 
     def _path(self, key: str) -> Path:
-        return self._root / key
+        path = (self._root / key).resolve()
+        if self._root.resolve() not in path.parents and path != self._root.resolve():
+            raise ValueError(f'Invalid key: {key!r} escapes storage root')
+        return path
 
     def put(self, key: str, data: bytes, content_type: str) -> None:
         path = self._path(key)
