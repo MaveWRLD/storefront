@@ -17,7 +17,7 @@ from .filters import ProductFilter
 from .models import Collection, Product, ProductImage, Review, Variant
 from .serializers import (
     CollectionSerializer, CreateProductSerializer, ProductImageSerializer,
-    ProductSerializer, ReviewSerializer, VariantSerializer,
+    ProductListSerializer, ProductSerializer, ReviewSerializer, VariantSerializer,
 )
 
 
@@ -91,6 +91,9 @@ class ProductAdminViewSet(ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'create':
             return CreateProductSerializer
+        if self.action == 'list':
+            # Trimmed shape for the list table — see ProductListSerializer.
+            return ProductListSerializer
         return ProductSerializer
 
     def get_serializer_context(self):

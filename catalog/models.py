@@ -71,6 +71,13 @@ class Product(models.Model):
         allocated to pending orders has nothing left to sell."""
         return any(variant.in_stock for variant in self.variants.all())
 
+    @property
+    def total_stock(self):
+        """Sum of every variant's raw `inventory` — a stock count, not a
+        sellable count, so unlike `in_stock`/Variant.available this doesn't
+        subtract `allocated`."""
+        return sum(variant.inventory for variant in self.variants.all())
+
     def __str__(self) -> str:
         return self.title
 
