@@ -126,13 +126,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'storefront',
         'HOST': 'localhost',
-        # LOCAL WORKTREE OVERRIDE (not part of any plan task, never commit
-        # this line): 5433 is the shared dev DB used by the main checkout
-        # (docker-compose container_name is hardcoded, so it's the SAME
-        # postgres instance across every worktree). 5434 is this worktree's
-        # own isolated container (storefront_postgres_wt_media_storage) —
-        # keeps this session's migrations/tests off the shared DB.
-        'PORT': '5434',
+        'PORT': '5433',
         'USER': 'postgres',
         'PASSWORD': 'testpass'
     }

@@ -153,6 +153,10 @@ class VariantSerializer(serializers.ModelSerializer):
     endpoint (US-20/US-21) — there's no separate variant-management story yet."""
     price_with_tax = serializers.SerializerMethodField()
     in_stock = serializers.BooleanField(read_only=True)
+    # Real sellable stock (inventory - allocated; None when inventory isn't
+    # tracked) — raw `inventory` alone reads wrong once stock is allocated
+    # to pending orders (allocated bumps at checkout, before payment).
+    available = serializers.IntegerField(read_only=True, allow_null=True)
     axis_values = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
     # Write side: exactly one AxisValue id per axis defined on the parent
@@ -167,11 +171,15 @@ class VariantSerializer(serializers.ModelSerializer):
         model = Variant
         fields = ['id', 'sku', 'unit_price', 'price_with_tax',
                   'compare_at_price', 'weight', 'track_inventory',
-                  'inventory', 'in_stock', 'axis_values', 'images',
-                  'axis_value_ids']
+                  'inventory', 'available', 'in_stock', 'axis_values',
+                  'images', 'axis_value_ids']
 
     def get_price_with_tax(self, variant: Variant):
-        return variant.unit_price.amount * Decimal(1.1)
+        # Money math first (currency-aware, exact), .amount only at the
+        # output boundary — matches the pattern used everywhere else
+        # (cart/order/report totals). `Decimal(1.1)` from a float literal
+        # would carry float-precision error; `Decimal('1.1')` is exact.
+        return (variant.unit_price * Decimal('1.1')).amount
 
     def get_axis_values(self, variant: Variant):
         return VariantAxisValueSerializer(
@@ -276,6 +284,46 @@ class ProductAxisSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'sort_order', 'values']
 
 
+class ProductImageListSerializer(serializers.ModelSerializer):
+    """Slim image shape for ProductListSerializer — the list table only
+    ever renders the first gallery image, and only its src/alt_text."""
+    src = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductImage
+        fields = ['src', 'alt_text']
+
+    def get_src(self, obj):
+        return build_url(obj.image_key, width=DEFAULT_SRC_WIDTH)
+
+
+class VariantListSerializer(serializers.ModelSerializer):
+    """Slim variant shape for ProductListSerializer — just what the list
+    table's price column needs (low-stock calc uses total_stock instead)."""
+    class Meta:
+        model = Variant
+        fields = ['unit_price', 'track_inventory']
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    """Trimmed shape for the products list table (admin dashboard) — drops
+    everything list.tsx doesn't render (description, slug, top-level price,
+    is_available/in_stock, axes, and most variant/image fields) so the list
+    response doesn't ship the full detail payload for every row."""
+    class Meta:
+        model = Product
+        fields = ['id', 'title', 'collection', 'status', 'total_stock',
+                  'images', 'variants']
+
+    total_stock = serializers.IntegerField(read_only=True)
+    images = serializers.SerializerMethodField()
+    variants = VariantListSerializer(many=True, read_only=True)
+
+    def get_images(self, product):
+        gallery = [img for img in product.images.all() if img.role == 'PRODUCT_GALLERY']
+        return ProductImageListSerializer(gallery, many=True).data
+
+
 class ProductSerializer(serializers.ModelSerializer):
     """Read/plain-update shape. Creation goes through
     CreateProductSerializer instead (see ProductAdminViewSet.create) — this
@@ -284,11 +332,12 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = ['id', 'title', 'description', 'slug', 'collection', 'price',
-                  'status', 'is_available', 'in_stock', 'images',
-                  'variants', 'axes']
+                  'status', 'is_available', 'in_stock', 'total_stock',
+                  'images', 'variants', 'axes']
 
     is_available = serializers.BooleanField(read_only=True)
     in_stock = serializers.BooleanField(read_only=True)
+    total_stock = serializers.IntegerField(read_only=True)
     images = serializers.SerializerMethodField()
     # Variants are display-only here — creation/update goes through the
     # products/{id}/variants/ sub-resource only (product+axes must exist

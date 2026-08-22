@@ -41,6 +41,9 @@ class TestUpdateProduct:
         product.refresh_from_db()
         storefront_view = APIClient().get(f'/store-front/products/{product.slug}/')
         assert storefront_view.data['title'] == 'New Title'
+        # total_stock is the sum of the product's variants' inventory (5
+        # from the single `product` fixture variant), not just reflected.
+        assert storefront_view.data['total_stock'] == 5
 
     def test_admin_can_toggle_availability_via_update(self, admin_client, product):
         response = admin_client.patch(
