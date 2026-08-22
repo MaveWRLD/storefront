@@ -6,9 +6,9 @@ import pytest
 from media_storage.services.upload import InvalidImageError, delete_image, upload_image
 
 
-def make_png_bytes():
+def make_png_bytes(size=(10, 10)):
     buf = BytesIO()
-    PILImage.new('RGB', (10, 10)).save(buf, format='PNG')
+    PILImage.new('RGB', size).save(buf, format='PNG')
     return buf.getvalue()
 
 
@@ -21,18 +21,24 @@ def mock_backend():
 
 
 def test_uploads_valid_png_and_returns_a_key_under_the_product(mock_backend):
-    key = upload_image(BytesIO(make_png_bytes()), product_id=1)
-    assert key.startswith('products/1/')
-    assert key.endswith('.png')
+    result = upload_image(BytesIO(make_png_bytes()), product_id=1)
+    assert result.key.startswith('products/1/')
+    assert result.key.endswith('.png')
     mock_backend.put.assert_called_once()
     called_key, called_data, called_content_type = mock_backend.put.call_args[0]
-    assert called_key == key
+    assert called_key == result.key
     assert called_content_type == 'image/png'
 
 
 def test_uploads_variant_tagged_image_under_variants_subpath(mock_backend):
-    key = upload_image(BytesIO(make_png_bytes()), product_id=1, variant_id=9)
-    assert key.startswith('products/1/variants/9/')
+    result = upload_image(BytesIO(make_png_bytes()), product_id=1, variant_id=9)
+    assert result.key.startswith('products/1/variants/9/')
+
+
+def test_result_includes_pixel_dimensions(mock_backend):
+    result = upload_image(BytesIO(make_png_bytes(size=(300, 200))), product_id=1)
+    assert result.width == 300
+    assert result.height == 200
 
 
 def test_rejects_file_over_10mb(mock_backend):
