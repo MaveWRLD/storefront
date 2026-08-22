@@ -178,6 +178,13 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Product images (US-02): pluggable storage — 'local' (default, no creds
 # needed) or 'r2' (Cloudflare R2). See media_storage app.
+# Deployment note: the 'r2' backend needs six env vars set (R2_BUCKET_NAME,
+# R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_DOMAIN,
+# and optionally R2_REGION, default 'auto'). Either backend also needs the
+# system `libmagic` library installed (python-magic wraps it) — on
+# Debian/Ubuntu: `apt-get install -y libmagic1`. Without it, `import magic`
+# fails at Django startup (media_storage.services.upload is imported by
+# catalog.serializers at module load time).
 MEDIA_STORAGE_BACKEND = os.environ.get('MEDIA_STORAGE_BACKEND', 'local')
 
 if MEDIA_STORAGE_BACKEND == 'r2':
