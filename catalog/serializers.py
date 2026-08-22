@@ -1,5 +1,8 @@
-from decimal import Decimal
+import json
+from decimal import Decimal, InvalidOperation
+from django.conf import settings
 from django.utils.text import slugify
+from djmoney.money import Money
 from rest_framework import serializers
 from orders.models import Order, OrderItem
 from media_storage.services.upload import delete_image, upload_image
@@ -7,6 +10,17 @@ from media_storage.services.image_url_builder import build_url
 from .models import (
     AxisValue, Product, ProductAxis, ProductImage, Collection, Review, Variant,
 )
+
+
+def unique_slug_from(title, instance=None):
+    base_slug = slugify(title)
+    slug = base_slug
+    qs = Product.objects.exclude(pk=instance.pk) if instance else Product.objects.all()
+    suffix = 1
+    while qs.filter(slug=slug).exists():
+        suffix += 1
+        slug = f'{base_slug}-{suffix}'
+    return slug
 
 
 class CollectionSerializer(serializers.ModelSerializer):
@@ -169,6 +183,109 @@ class ProductSerializer(serializers.ModelSerializer):
         if new_title and new_title != instance.title:
             validated_data['slug'] = self._unique_slug_from(new_title, instance=instance)
         return super().update(instance, validated_data)
+
+
+class CreateProductSerializer(serializers.Serializer):
+    """Admin product creation. Multipart request, two parts:
+      - 'data': JSON string — {name, price: {amount, currency},
+        axes: [{name, sortOrder, allowedValues: [{name, code}]}]}
+      - 'images': one or more files (>=1 required)
+
+    Unlike the plain ProductSerializer.create, axes+values aren't optional
+    here — a product created through this endpoint must define its full
+    set of variant dimensions (any axis names, not just size/color) up
+    front, each with at least one allowed value, before any Variant can be
+    added via the products/{id}/variants/ sub-resource. No `collection` is
+    collected here — assign one afterwards via a plain update, if needed."""
+    data = serializers.CharField(write_only=True)
+    images = serializers.ListField(
+        child=serializers.ImageField(), allow_empty=False, write_only=True,
+        error_messages={'empty': 'At least one image is required.'})
+
+    def validate_data(self, raw):
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            raise serializers.ValidationError("'data' must be valid JSON.")
+        if not isinstance(parsed, dict):
+            raise serializers.ValidationError("'data' must be a JSON object.")
+
+        errors = {}
+
+        title = (parsed.get('name') or '').strip()
+        if not title:
+            errors['name'] = 'This field may not be blank.'
+        elif Product.objects.filter(title=title).exists():
+            errors['name'] = 'A product with this name already exists.'
+
+        price = parsed.get('price') or {}
+        amount = None
+        try:
+            amount = Decimal(str(price.get('amount')))
+            if amount <= 0:
+                raise InvalidOperation
+        except (TypeError, InvalidOperation):
+            errors.setdefault('price', {})['amount'] = 'Must be a number greater than 0.'
+        currency = price.get('currency')
+        if currency not in settings.CURRENCIES:
+            errors.setdefault('price', {})['currency'] = (
+                f"Must be one of: {', '.join(settings.CURRENCIES)}.")
+
+        axes = parsed.get('axes') or []
+        if not axes:
+            errors['axes'] = 'At least one axis is required.'
+        else:
+            for i, axis in enumerate(axes):
+                if not (axis.get('name') or '').strip():
+                    errors[f'axes[{i}].name'] = 'This field may not be blank.'
+                if axis.get('sortOrder', 0) < 0:
+                    errors[f'axes[{i}].sortOrder'] = 'Must be >= 0.'
+                values = axis.get('allowedValues') or []
+                if not values:
+                    errors[f'axes[{i}].allowedValues'] = 'At least one allowed value is required.'
+                else:
+                    for j, value in enumerate(values):
+                        if not (value.get('name') or '').strip():
+                            errors[f'axes[{i}].allowedValues[{j}].name'] = 'This field may not be blank.'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        parsed['_title'] = title
+        parsed['_amount'] = amount
+        parsed['_currency'] = currency
+        return parsed
+
+    def create(self, validated_data):
+        data = validated_data['data']
+        images = validated_data['images']
+
+        product = Product.objects.create(
+            title=data['_title'],
+            slug=unique_slug_from(data['_title']),
+            price=Money(data['_amount'], data['_currency']))
+
+        for axis in data['axes']:
+            axis_obj = ProductAxis.objects.create(
+                product=product, name=axis['name'].strip(),
+                sort_order=axis.get('sortOrder', 0))
+            for value in axis['allowedValues']:
+                AxisValue.objects.create(
+                    axis=axis_obj, name=value['name'].strip(),
+                    code=value.get('code', ''))
+
+        # bulk_create can't run per-row I/O — upload each file first
+        # (sequentially; there's no async story here), then insert the
+        # rows in one bulk statement with the resulting keys.
+        image_keys = [
+            upload_image(image, product_id=product.id)
+            for image in images
+        ]
+        ProductImage.objects.bulk_create([
+            ProductImage(product=product, image_key=key, sort_order=i)
+            for i, key in enumerate(image_keys)
+        ])
+        return product
 
 
 class ReviewSerializer(serializers.ModelSerializer):
