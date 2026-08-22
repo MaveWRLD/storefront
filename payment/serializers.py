@@ -45,6 +45,18 @@ class InitializePaymentSerializer(serializers.Serializer):
         elif data.get('guest_token') != order.guest_token:
             raise serializers.ValidationError(
                 'You do not have permission to pay for this order.')
+
+        # A DELIVERY order gets its shipping_cost from POST /shipping/rates/
+        # (shipping/serializers.py:RateQuoteSerializer.save) — that's a
+        # separate frontend step, not enforced by order creation, so
+        # nothing otherwise stops a caller going straight from create ->
+        # pay and shipping the order for free (Order.shipping_cost
+        # defaults to 0, orders/models.py).
+        if order.fulfillment_method == Order.FULFILLMENT_DELIVERY \
+                and order.shipping_cost.amount == 0:
+            raise serializers.ValidationError(
+                'This order has no shipping rate yet — call '
+                '/shipping/rates/ before paying.')
         return data
 
     def save(self, **kwargs):
