@@ -66,9 +66,17 @@ class Product(models.Model):
 
     @property
     def in_stock(self):
-        return self.variants.filter(
-            models.Q(track_inventory=False) | models.Q(inventory__gt=0)
-        ).exists()
+        """Must agree with Variant.in_stock/available (inventory -
+        allocated), not raw inventory — a variant with stock fully
+        allocated to pending orders has nothing left to sell."""
+        return any(variant.in_stock for variant in self.variants.all())
+
+    @property
+    def total_stock(self):
+        """Sum of every variant's raw `inventory` — a stock count, not a
+        sellable count, so unlike `in_stock`/Variant.available this doesn't
+        subtract `allocated`."""
+        return sum(variant.inventory for variant in self.variants.all())
 
     def __str__(self) -> str:
         return self.title

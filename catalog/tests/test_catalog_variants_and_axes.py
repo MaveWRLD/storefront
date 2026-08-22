@@ -72,6 +72,16 @@ class TestCatalogVariantsAndAxes:
         assert variant.available == 0
         assert variant.in_stock is False
 
+    def test_product_in_stock_false_once_every_variant_fully_allocated(self, product):
+        """Product.in_stock must agree with Variant.in_stock/available
+        (inventory - allocated), not raw inventory — a product with stock
+        entirely allocated to pending orders has nothing left to sell."""
+        Variant.objects.create(
+            product=product, sku='test-shirt-s', unit_price=1000,
+            inventory=5, allocated=5)
+
+        assert product.in_stock is False
+
     def test_product_can_have_axes_with_values(self, product):
         size_axis = ProductAxis.objects.create(
             product=product, name='Size', sort_order=0)

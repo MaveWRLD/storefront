@@ -69,6 +69,8 @@ class TestCreateProduct:
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data['slug'] == 'new-shirt'
         assert response.data['is_available'] is True
+        # no variants at creation time (added via the sub-resource below)
+        assert response.data['total_stock'] == 0
         assert len(response.data['images']) == 1
         assert {axis['name'] for axis in response.data['axes']} == {'Size', 'Color'}
 
@@ -130,6 +132,7 @@ class TestCreateProduct:
         assert response.data['sku'] == 'new-shirt-s-r'
         product = Product.objects.get(pk=product_id)
         assert product.variants.count() == 1
+        assert product.total_stock == 5
 
     def test_admin_can_attach_an_additional_image_to_a_product(self, admin_client):
         create_response = post_product(admin_client)
