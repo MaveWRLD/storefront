@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'debug_toolbar',
     'djmoney',
     'catalog',
+    'media_storage',
     'customers',
     'cart',
     'orders',
