@@ -36,7 +36,7 @@ class CartItem(models.Model):
     # GET cart flag price_changed (cart transparency: Spring recalculates
     # each line on read; Django had no baseline to compare against).
     price_at_add = MoneyField(
-        max_digits=6, decimal_places=2, default_currency='USD',
+        max_digits=6, decimal_places=2, default_currency='GHS',
         null=True, blank=True)
 
     class Meta:

@@ -45,7 +45,7 @@ class Shipment(models.Model):
     # The provider's shipment/tracking id. Set once booking succeeds.
     tracking_reference = models.CharField(max_length=100, unique=True, null=True, blank=True)
     carrier_name = models.CharField(max_length=100, blank=True, default='')
-    cost = MoneyField(max_digits=10, decimal_places=2, default_currency='USD', default=0)
+    cost = MoneyField(max_digits=10, decimal_places=2, default_currency='GHS', default=0)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
     # Set when the provider rejects/can't complete a booking attempt

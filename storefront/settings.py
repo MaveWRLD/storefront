@@ -126,7 +126,13 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'storefront',
         'HOST': 'localhost',
-        'PORT': '5433',
+        # LOCAL WORKTREE OVERRIDE (not part of any plan task, never commit
+        # this line): 5433 is the shared dev DB used by the main checkout
+        # (docker-compose container_name is hardcoded, so it's the SAME
+        # postgres instance across every worktree). 5434 is this worktree's
+        # own isolated container (storefront_postgres_wt_media_storage) —
+        # keeps this session's migrations/tests off the shared DB.
+        'PORT': '5434',
         'USER': 'postgres',
         'PASSWORD': 'testpass'
     }
@@ -246,8 +252,8 @@ SIMPLE_JWT = {
 SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
 
 # django-money
-DEFAULT_CURRENCY = 'USD'
-CURRENCIES = ('USD',)
+DEFAULT_CURRENCY = 'GHS'
+CURRENCIES = ('GHS',)
 
 # Cart (US-12, Business Rule: 'Abandoned checkout preserves the cart') —
 # a cart is only expired after this many days without activity (Cart.last_activity).
