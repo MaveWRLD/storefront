@@ -189,3 +189,6 @@ specs/
 
 .mcp.json
 scratch_test_dawurobo_key.sh
+
+# collectstatic output (prod build artifact, regenerated on every deploy)
+staticfiles/

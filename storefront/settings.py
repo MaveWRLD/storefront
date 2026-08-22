@@ -37,6 +37,16 @@ ALLOWED_HOSTS = [
 # (DEBUG's implicit localhost/127.0.0.1 allowance doesn't cover it) — e.g.
 # ALLOWED_HOSTS=abcd1234.ngrok-free.app
 
+if not DEBUG:
+    # Railway (and most PaaS) terminate TLS at the edge and proxy plain
+    # HTTP internally — without this header Django thinks every request
+    # is insecure and SECURE_SSL_REDIRECT below loops forever.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 7  # 1 week; raise once confirmed stable
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
 
 # Application definition
 
@@ -52,7 +62,6 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'djoser',
     'corsheaders',
-    'debug_toolbar',
     'djmoney',
     'catalog',
     'media_storage',
@@ -69,9 +78,17 @@ INSTALLED_APPS = [
     'core',
 ]
 
+# debug_toolbar is dev-only — injects a panel + extra queries on every
+# request, and its default INTERNAL_IPS check is not something to rely on
+# in prod. Only load the app/middleware when DEBUG is on.
+if DEBUG:
+    INSTALLED_APPS.append('debug_toolbar')
+
 MIDDLEWARE = [
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Serves collected static files directly from gunicorn — no separate
+    # static host needed for admin/DRF-browsable-API/spectacular assets.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -81,6 +98,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+if DEBUG:
+    MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+
 INTERNAL_IPS = [
     # ...
     '127.0.0.1',
@@ -89,12 +109,13 @@ INTERNAL_IPS = [
 
 # CORS: allow the local Refine dev server(s) to call this API with a
 # Bearer token (Authorization header). Add production frontend origin(s)
-# here once deployed — do not use CORS_ALLOW_ALL_ORIGINS in production.
+# via CORS_ALLOWED_ORIGINS env var (comma-separated) — do not use
+# CORS_ALLOW_ALL_ORIGINS in production.
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:4173',   # Vite default    # Vite default
     'http://localhost:3000',   # CRA/Next default
-]
+] + [o for o in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if o]
 CORS_ALLOW_CREDENTIALS = True
 # Cache preflight (OPTIONS) responses in the browser so repeat requests
 # skip the extra round trip. 86400s = 24h (Chrome's own cap on this value).
@@ -173,6 +194,13 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/3.2/howto/static-files/
 
 STATIC_URL = '/static/'
+# collectstatic target for prod (whitenoise middleware serves from here).
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Product images (US-02). No object-storage integration yet (that's a
 # separate infra concern) — local media storage for now.
