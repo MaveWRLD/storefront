@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.core.validators import MaxValueValidator, MinValueValidator
 from djmoney.models.fields import MoneyField
@@ -34,16 +35,28 @@ class Product(models.Model):
     """Domains — Catalog class diagram: Product now only carries identity
     fields. Price and stock moved to Variant (a product can have more than
     one), matching the diagram's Product 1-->0..* Variant edge."""
-    title = models.CharField(max_length=255)
+    title = models.CharField(max_length=255, unique=True)
     slug = models.SlugField(unique=True)
     description = models.TextField(null=True, blank=True)
     status = models.CharField(
         max_length=9,
         choices=ProductStatus.choices,
         default=ProductStatus.PUBLISHED)
+    # Base/display price — informational (e.g. listing pages before a
+    # variant is picked). The real sellable price is always Variant.unit_price;
+    # a variant can differ from this (sale price, size upcharge, etc).
+    # Nullable: older rows predate this field, and it's optional on the
+    # plain admin update path — only the create-with-axes-and-images flow
+    # (CreateProductSerializer) requires it.
+    price = MoneyField(
+        max_digits=10, decimal_places=2, default_currency='GHS',
+        null=True, blank=True, validators=[MinMoneyValidator(Decimal('0.01'))])
     last_update = models.DateTimeField(auto_now=True)
+    # Nullable: the create-with-axes-and-images flow (CreateProductSerializer)
+    # doesn't collect a collection at creation time — assign one after, if needed.
     collection = models.ForeignKey(
-        Collection, on_delete=models.PROTECT, related_name='products')
+        Collection, on_delete=models.PROTECT, related_name='products',
+        null=True, blank=True)
     promotions = models.ManyToManyField(Promotion, blank=True)
 
     @property
@@ -80,10 +93,10 @@ class Variant(models.Model):
     unit_price = MoneyField(
         max_digits=6,
         decimal_places=2,
-        default_currency='USD',
+        default_currency='GHS',
         validators=[MinMoneyValidator(1)])
     compare_at_price = MoneyField(
-        max_digits=6, decimal_places=2, default_currency='USD',
+        max_digits=6, decimal_places=2, default_currency='GHS',
         null=True, blank=True)
     weight = models.DecimalField(
         max_digits=6, decimal_places=2, null=True, blank=True)
@@ -150,10 +163,39 @@ class AxisValue(models.Model):
         ordering = ['id']
 
 
+class VariantAxisValue(models.Model):
+    """Domains — Catalog class diagram: Variant 1-->0..* VariantAxisValue,
+    one row per (variant, axis) pair recording which value that variant
+    selected on that axis (e.g. this variant is 'Red' on the 'Color' axis,
+    'M' on the 'Size' axis). Closes the previously-missing Variant<->AxisValue
+    link — before this, a Variant carried no record of which size/color it was.
+
+    The table only guarantees a variant can't repeat the exact same axis
+    value row twice (unique_together below). It does NOT enforce "exactly
+    one value per axis" or "no two variants share the same combination" —
+    those are business rules enforced in code (VariantSerializer), same as
+    the reference diagram notes ("enforced in code, not schema")."""
+    variant = models.ForeignKey(
+        Variant, on_delete=models.CASCADE, related_name='axis_values')
+    axis_value = models.ForeignKey(
+        AxisValue, on_delete=models.CASCADE, related_name='variant_links')
+
+    def __str__(self) -> str:
+        return f'{self.variant.sku}: {self.axis_value}'
+
+    class Meta:
+        ordering = ['axis_value__axis__sort_order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['variant', 'axis_value'],
+                name='unique_variant_axis_value'),
+        ]
+
+
 class ProductImage(models.Model):
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField(upload_to='products')
+    image_key = models.CharField(max_length=512)
     alt_text = models.CharField(max_length=255, blank=True)
     sort_order = models.PositiveIntegerField(default=0)
     # Set only on an "image-bearing axis" (typically Color) — this photo
@@ -161,6 +203,14 @@ class ProductImage(models.Model):
     # picks it. Null = an ordinary, axis-independent product photo.
     axis_value = models.ForeignKey(
         AxisValue, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='images')
+    # Set to override the product/swatch gallery for one specific variant
+    # (e.g. this exact SKU photographed on a model). Mutually exclusive
+    # with axis_value — enforced in ProductImageSerializer, not the
+    # schema — same "polymorphic-by-owner, business rule in code" pattern
+    # as VariantAxisValue.
+    variant = models.ForeignKey(
+        Variant, on_delete=models.CASCADE, null=True, blank=True,
         related_name='images')
 
     class Meta:
