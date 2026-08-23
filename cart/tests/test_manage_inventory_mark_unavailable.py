@@ -3,7 +3,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 import pytest
 
-from catalog.models import Collection, Product, ProductStatus, Variant
+from catalog.models import Collection, Product, ProductImage, ProductStatus, Variant
 from cart.models import Cart
 
 User = get_user_model()
@@ -70,6 +70,9 @@ class TestManageInventoryMarkUnavailable:
 
     def test_replenished_and_republished_product_can_be_added_to_cart_again(self, admin_client, cart, make_product):
         product = make_product(inventory=0, status=ProductStatus.ARCHIVED)
+        ProductImage.objects.create(product=product, image_key='gallery.png')
+        ProductImage.objects.create(
+            product=product, image_key='variant.png', variant=product.variant)
 
         admin_client.patch(
             f'/store-admin/products/{product.id}/', {'status': ProductStatus.PUBLISHED})
