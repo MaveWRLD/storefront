@@ -12,11 +12,30 @@ signals, no separate Loki user/key.
 """
 import logging
 import os
+import random
 
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource
+
+
+class LogSamplingFilter(logging.Filter):
+    """Drops a random fraction of sub-WARNING records before OTLP export.
+
+    Mirrors the Sentry traces_sample_rate pattern: WARNING+ is always kept
+    (errors/warnings are cheap in volume and too valuable to drop), only
+    INFO/DEBUG noise gets sampled down to keep export volume/cost sane.
+    """
+
+    def __init__(self, sample_rate):
+        super().__init__()
+        self.sample_rate = sample_rate
+
+    def filter(self, record):
+        if record.levelno >= logging.WARNING:
+            return True
+        return random.random() < self.sample_rate
 
 
 def get_otel_log_handler():
@@ -25,4 +44,7 @@ def get_otel_log_handler():
     })
     provider = LoggerProvider(resource=resource)
     provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
-    return LoggingHandler(level=logging.NOTSET, logger_provider=provider)
+    handler = LoggingHandler(level=logging.NOTSET, logger_provider=provider)
+    sample_rate = float(os.environ.get('OTEL_LOGS_SAMPLE_RATE', '0.1'))
+    handler.addFilter(LogSamplingFilter(sample_rate))
+    return handler

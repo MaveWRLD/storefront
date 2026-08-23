@@ -45,10 +45,12 @@ if SENTRY_DSN:
             'SENTRY_ENVIRONMENT',
             os.environ.get('DJANGO_SETTINGS_MODULE', '').rsplit('.', 1)[-1] or 'unknown',
         ),
-        # Fraction of requests sent to Performance/Tracing — 0.2 keeps
-        # volume/cost sane while still giving latency breakdowns. Errors
-        # are always captured regardless of this rate.
-        traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0.2')),
+        # Tracing lives in Grafana Cloud via OTLP now (see Procfile's
+        # opentelemetry-instrument + OTEL_TRACES_SAMPLER*) — Sentry here is
+        # error capture only, so traces_sample_rate stays 0 to avoid a
+        # second, separately-tuned trace pipeline. Errors are always
+        # captured regardless of this rate.
+        traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0')),
         send_default_pii=False,
     )
 
