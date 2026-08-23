@@ -25,6 +25,8 @@ django-prometheus = "*"
 opentelemetry-distro = "*"
 opentelemetry-exporter-otlp = "*"
 opentelemetry-instrumentation-django = "*"
+opentelemetry-instrumentation-psycopg2 = "*"
+opentelemetry-instrumentation-system-metrics = "*"
 
 [dev-packages]
 autopep8 = "*"

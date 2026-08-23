@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "69707645140db311b75586251a31eb157c37fbb9c46db429038e3e4f0850a54a"
+            "sha256": "60d087a6d0b9466ff2dc05e36839fd92bea0d067ea9a5f1bdf5fca67caed3897"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -687,10 +687,36 @@
             "markers": "python_version >= '3.10'",
             "version": "==0.65b0"
         },
+        "opentelemetry-instrumentation-dbapi": {
+            "hashes": [
+                "sha256:50b662578a6903b028e09b73f604de687752f5f904aa0ca032969157b29d60f2",
+                "sha256:da048bb683347ddad2f47344bacfe1e111bf7bfb2e5a39796b1083679ad4f0f3"
+            ],
+            "markers": "python_version >= '3.10'",
+            "version": "==0.65b0"
+        },
         "opentelemetry-instrumentation-django": {
             "hashes": [
                 "sha256:915117536c421c3e61e34dadbd373fc404447c7a786303e02f732bc8860e3ba0",
                 "sha256:f79914e03ccf7f34a4dfd257ea9fa1236a6568cd1756e5f969dc026252fad6e9"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.10'",
+            "version": "==0.65b0"
+        },
+        "opentelemetry-instrumentation-psycopg2": {
+            "hashes": [
+                "sha256:4eba60bef5f25d163a098109c2960773f3753e0b7e39824b9f398ba49ffab783",
+                "sha256:91880c7dbcd2b9cc62694894abed7f69fdad4bae472d1d3664a82650294f9836"
+            ],
+            "index": "pypi",
+            "markers": "python_version >= '3.10'",
+            "version": "==0.65b0"
+        },
+        "opentelemetry-instrumentation-system-metrics": {
+            "hashes": [
+                "sha256:48ef6c8f5924f391d07c073a40c7018874046703477e538fbe64ff37af196cf0",
+                "sha256:c8b82821ccc95c5f2c516bb72356f75673ced51364eed583a14bf3b85fa6a0c7"
             ],
             "index": "pypi",
             "markers": "python_version >= '3.10'",
@@ -859,6 +885,33 @@
             ],
             "markers": "python_version >= '3.10'",
             "version": "==7.36.0"
+        },
+        "psutil": {
+            "hashes": [
+                "sha256:0746f5f8d406af344fd547f1c8daa5f5c33dbc293bb8d6a16d80b4bb88f59372",
+                "sha256:076a2d2f923fd4821644f5ba89f059523da90dc9014e85f8e45a5774ca5bc6f9",
+                "sha256:11fe5a4f613759764e79c65cf11ebdf26e33d6dd34336f8a337aa2996d71c841",
+                "sha256:1a571f2330c966c62aeda00dd24620425d4b0cc86881c89861fbc04549e5dc63",
+                "sha256:1a7b04c10f32cc88ab39cbf606e117fd74721c831c98a27dc04578deb0c16979",
+                "sha256:1fa4ecf83bcdf6e6c8f4449aff98eefb5d0604bf88cb883d7da3d8d2d909546a",
+                "sha256:2edccc433cbfa046b980b0df0171cd25bcaeb3a68fe9022db0979e7aa74a826b",
+                "sha256:7b6d09433a10592ce39b13d7be5a54fbac1d1228ed29abc880fb23df7cb694c9",
+                "sha256:8c233660f575a5a89e6d4cb65d9f938126312bca76d8fe087b947b3a1aaac9ee",
+                "sha256:917e891983ca3c1887b4ef36447b1e0873e70c933afc831c6b6da078ba474312",
+                "sha256:ab486563df44c17f5173621c7b198955bd6b613fb87c71c161f827d3fb149a9b",
+                "sha256:ae0aefdd8796a7737eccea863f80f81e468a1e4cf14d926bd9b6f5f2d5f90ca9",
+                "sha256:b0726cecd84f9474419d67252add4ac0cd9811b04d61123054b9fb6f57df6e9e",
+                "sha256:b58fabe35e80b264a4e3bb23e6b96f9e45a3df7fb7eed419ac0e5947c61e47cc",
+                "sha256:c7663d4e37f13e884d13994247449e9f8f574bc4655d509c3b95e9ec9e2b9dc1",
+                "sha256:e452c464a02e7dc7822a05d25db4cde564444a67e58539a00f929c51eddda0cf",
+                "sha256:e78c8603dcd9a04c7364f1a3e670cea95d51ee865e4efb3556a3a63adef958ea",
+                "sha256:eb7e81434c8d223ec4a219b5fc1c47d0417b12be7ea866e24fb5ad6e84b3d988",
+                "sha256:ed0cace939114f62738d808fdcecd4c869222507e266e574799e9c0faa17d486",
+                "sha256:eed63d3b4d62449571547b60578c5b2c4bcccc5387148db46e0c2313dad0ee00",
+                "sha256:fd04ef36b4a6d599bbdb225dd1d3f51e00105f6d48a28f006da7f9822f2606d8"
+            ],
+            "markers": "python_version >= '3.6'",
+            "version": "==7.2.2"
         },
         "psycopg2-binary": {
             "hashes": [

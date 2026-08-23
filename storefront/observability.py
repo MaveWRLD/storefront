@@ -15,6 +15,7 @@ import os
 import random
 
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.instrumentation.system_metrics import SystemMetricsInstrumentor
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import Resource
@@ -48,3 +49,14 @@ def get_otel_log_handler():
     sample_rate = float(os.environ.get('OTEL_LOGS_SAMPLE_RATE', '0.1'))
     handler.addFilter(LogSamplingFilter(sample_rate))
     return handler
+
+
+def instrument_system_metrics():
+    """Emits process CPU/memory/GC/network metrics (jvm.* equivalent for
+    Python) via the global MeterProvider that opentelemetry-instrument
+    already set up (Procfile). Call once per worker process, from an
+    AppConfig.ready() — safe to call multiple times only because Django
+    guards ready() against double-invocation itself, so no re-entrancy
+    guard is needed here.
+    """
+    SystemMetricsInstrumentor().instrument()
