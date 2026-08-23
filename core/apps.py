@@ -13,5 +13,6 @@ class CoreConfig(AppConfig):
         # No-op locally when OTEL_EXPORTER_OTLP_ENDPOINT isn't set — same
         # gate as the log handler in storefront/observability.py.
         if os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT'):
-            from storefront.observability import instrument_system_metrics
+            from storefront.observability import configure_metrics, instrument_system_metrics
+            configure_metrics()
             instrument_system_metrics()
