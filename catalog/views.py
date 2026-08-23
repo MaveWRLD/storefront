@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404
 from core.pagination import DefaultPagination
 from customers.models import Customer
 from media_storage.services.upload import delete_image
-from .filters import ProductFilter
+from .filters import CollectionFilter, ProductFilter
 from .models import Collection, Product, ProductImage, Review, Variant
 from .serializers import (
     CollectionSerializer, CreateProductSerializer, ProductImageSerializer,
@@ -156,6 +156,8 @@ class CollectionAdminViewSet(ModelViewSet):
         products_count=Count('products')).all()
     serializer_class = CollectionSerializer
     permission_classes = [IsAdminUser]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CollectionFilter
 
     def destroy(self, request, *args, **kwargs):
         if Product.objects.filter(collection_id=kwargs['pk']):

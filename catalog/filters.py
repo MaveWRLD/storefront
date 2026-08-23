@@ -1,5 +1,5 @@
 from django_filters.rest_framework import FilterSet, NumberFilter
-from .models import Product
+from .models import Collection, Product
 
 
 class ProductFilter(FilterSet):
@@ -14,4 +14,12 @@ class ProductFilter(FilterSet):
         model = Product
         fields = {
             'collection_id': ['exact'],
+        }
+
+
+class CollectionFilter(FilterSet):
+    class Meta:
+        model = Collection
+        fields = {
+            'id': ['exact', 'in'],
         }
