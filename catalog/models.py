@@ -214,34 +214,20 @@ class ProductImage(models.Model):
     # Plain flag, no uniqueness constraint — multiple images per product may
     # be marked hero. Not exposed in any serializer output yet.
     is_hero = models.BooleanField(default=False)
-    # Set only on an "image-bearing axis" (typically Color) — this photo
-    # belongs to that specific swatch and is swapped in when the shopper
-    # picks it. Null = an ordinary, axis-independent product photo.
-    axis_value = models.ForeignKey(
-        AxisValue, on_delete=models.CASCADE, null=True, blank=True,
-        related_name='images')
-    # Set to override the product/swatch gallery for one specific variant
-    # (e.g. this exact SKU photographed on a model). Mutually exclusive
-    # with axis_value — enforced both here (DB) and in
-    # ProductImageSerializer.validate (early, friendlier error).
+    # Set to override the product gallery for one specific variant (e.g.
+    # this exact SKU photographed on a model). Null = an ordinary,
+    # variant-independent product photo.
     variant = models.ForeignKey(
         Variant, on_delete=models.CASCADE, null=True, blank=True,
         related_name='images')
 
     class Meta:
         ordering = ['sort_order', 'id']
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(axis_value__isnull=True) | models.Q(variant__isnull=True),
-                name='productimage_axis_value_or_variant_not_both'),
-        ]
 
     @property
     def role(self) -> str:
         if self.variant_id:
             return 'VARIANT_OVERRIDE'
-        if self.axis_value_id:
-            return 'AXIS_VALUE_GALLERY'
         return 'PRODUCT_GALLERY'
 
     @property
