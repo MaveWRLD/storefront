@@ -49,6 +49,10 @@ def store_api_root(request, format=None):
 
 
 urlpatterns = [
+    # Scraped by Grafana Alloy/Agent and forwarded via remote_write to
+    # Grafana Cloud Prometheus — not exposed publicly on Railway, only
+    # reachable from the agent's internal network hop.
+    path('', include('django_prometheus.urls')),
     path('admin/', admin.site.urls),
     path('store-front/', store_api_root, name='api-root'),
     path('store-front/', include('catalog.urls_front')),
