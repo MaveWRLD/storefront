@@ -171,6 +171,14 @@ class TestPerVariantImages:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_rejects_nonexistent_variant_id(self, admin_client, product):
+        response = admin_client.post(
+            f'/store-admin/products/{product.id}/images/',
+            {'image': make_image(), 'variant': 999999},
+            format='multipart')
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
     def test_storefront_product_detail_exposes_variant_images(self, product, small):
         variant = Variant.objects.create(product=product, sku='test-shirt-s', unit_price=1000)
         ProductImage.objects.create(
