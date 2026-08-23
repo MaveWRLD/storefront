@@ -160,17 +160,6 @@ class TestPerVariantImages:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_rejects_both_axis_value_and_variant_on_same_image(
-            self, admin_client, product, small, size_axis):
-        variant = Variant.objects.create(product=product, sku='test-shirt-s', unit_price=1000)
-
-        response = admin_client.post(
-            f'/store-admin/products/{product.id}/images/',
-            {'image': make_image(), 'variant': variant.id, 'axis_value': small.id},
-            format='multipart')
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-
     def test_rejects_nonexistent_variant_id(self, admin_client, product):
         response = admin_client.post(
             f'/store-admin/products/{product.id}/images/',

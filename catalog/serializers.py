@@ -37,9 +37,6 @@ class CollectionSerializer(serializers.ModelSerializer):
 
 class ProductImageSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(write_only=True)
-    axis_value = serializers.PrimaryKeyRelatedField(
-        queryset=AxisValue.objects.all(), required=False, allow_null=True,
-        write_only=True)
     variant = serializers.PrimaryKeyRelatedField(
         queryset=Variant.objects.all(), required=False, allow_null=True,
         write_only=True)
@@ -49,7 +46,6 @@ class ProductImageSerializer(serializers.ModelSerializer):
     role = serializers.ReadOnlyField()
     product_id = serializers.IntegerField(read_only=True)
     variant_id = serializers.IntegerField(read_only=True)
-    axis_value_id = serializers.IntegerField(read_only=True)
     src = serializers.SerializerMethodField()
     srcset = serializers.SerializerMethodField()
 
@@ -57,7 +53,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
         model = ProductImage
         fields = ['id', 'image', 'alt_text', 'position', 'object_key',
                   'aspect_ratio', 'role', 'product_id', 'variant_id',
-                  'axis_value_id', 'src', 'srcset', 'axis_value', 'variant']
+                  'src', 'srcset', 'variant']
 
     def get_src(self, obj):
         return build_url(obj.image_key, width=DEFAULT_SRC_WIDTH)
@@ -74,31 +70,14 @@ class ProductImageSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(str(e))
         return image_file
 
-    def validate_axis_value(self, axis_value):
-        # An image tagged to a swatch must be a value of an axis on this
-        # same product — otherwise it could claim to swap in for a color
-        # that has nothing to do with the product it's a photo of.
-        product_id = self.context['product_id']
-        if not axis_value.axis.product_id == int(product_id):
-            raise serializers.ValidationError(
-                'This axis value does not belong to this product.')
-        return axis_value
-
     def validate_variant(self, variant):
-        # Same idea as axis_value above: an override photo must actually
-        # belong to a variant of this same product.
+        # An override photo must actually belong to a variant of this same
+        # product.
         product_id = self.context['product_id']
         if not variant.product_id == int(product_id):
             raise serializers.ValidationError(
                 'This variant does not belong to this product.')
         return variant
-
-    def validate(self, attrs):
-        if attrs.get('axis_value') and attrs.get('variant'):
-            raise serializers.ValidationError(
-                'An image can be tagged to an axis value (swatch) or a '
-                'variant (override), not both.')
-        return attrs
 
     def create(self, validated_data):
         product_id = self.context['product_id']
@@ -264,14 +243,9 @@ class SimpleVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductAxisValueSerializer(serializers.ModelSerializer):
-    images = serializers.SerializerMethodField()
-
     class Meta:
         model = AxisValue
-        fields = ['id', 'name', 'code', 'images']
-
-    def get_images(self, axis_value):
-        return ProductImageSerializer(axis_value.images.all(), many=True).data
+        fields = ['id', 'name', 'code']
 
 
 class ProductAxisSerializer(serializers.ModelSerializer):

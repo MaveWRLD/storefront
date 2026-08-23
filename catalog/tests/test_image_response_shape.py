@@ -3,7 +3,7 @@ from rest_framework.test import APIClient
 from rest_framework import status
 import pytest
 
-from catalog.models import AxisValue, Collection, Product, ProductAxis, ProductImage, Variant
+from catalog.models import Collection, Product, ProductImage, Variant
 
 User = get_user_model()
 
@@ -27,7 +27,7 @@ def product(collection):
 
 IMAGE_RESPONSE_KEYS = {
     'id', 'object_key', 'alt_text', 'position', 'aspect_ratio', 'role',
-    'product_id', 'variant_id', 'axis_value_id', 'src', 'srcset',
+    'product_id', 'variant_id', 'src', 'srcset',
 }
 
 
@@ -49,22 +49,8 @@ class TestImageResponseShape:
         assert data['role'] == 'PRODUCT_GALLERY'
         assert data['product_id'] == product.id
         assert data['variant_id'] is None
-        assert data['axis_value_id'] is None
         assert data['src'].endswith('products/1/photo.png') or 'width=' in data['src']
         assert '400w' in data['srcset']
-
-    def test_axis_value_tagged_image_reports_correct_role_and_ids(self, product):
-        axis = ProductAxis.objects.create(product=product, name='Color')
-        red = AxisValue.objects.create(axis=axis, name='Red', code='red')
-        image = ProductImage.objects.create(
-            product=product, image_key='k.png', axis_value=red)
-
-        from catalog.serializers import ProductImageSerializer
-        data = ProductImageSerializer(image).data
-
-        assert data['role'] == 'AXIS_VALUE_GALLERY'
-        assert data['axis_value_id'] == red.id
-        assert data['variant_id'] is None
 
     def test_variant_tagged_image_reports_correct_role_and_ids(self, product):
         variant = Variant.objects.create(product=product, sku='test-s', unit_price=1000)
@@ -76,7 +62,6 @@ class TestImageResponseShape:
 
         assert data['role'] == 'VARIANT_OVERRIDE'
         assert data['variant_id'] == variant.id
-        assert data['axis_value_id'] is None
 
     def test_admin_upload_response_uses_position_not_sort_order(self, admin_client, product):
         from io import BytesIO
@@ -97,12 +82,9 @@ class TestImageResponseShape:
 
 @pytest.mark.django_db
 class TestImageNestingByRole:
-    def test_product_images_excludes_axis_value_and_variant_tagged(self, product):
-        axis = ProductAxis.objects.create(product=product, name='Color')
-        red = AxisValue.objects.create(axis=axis, name='Red', code='red')
+    def test_product_images_excludes_variant_tagged(self, product):
         variant = Variant.objects.create(product=product, sku='test-s', unit_price=1000)
         ProductImage.objects.create(product=product, image_key='plain.png')
-        ProductImage.objects.create(product=product, image_key='axis.png', axis_value=red)
         ProductImage.objects.create(product=product, image_key='variant.png', variant=variant)
 
         from catalog.serializers import ProductSerializer
@@ -120,15 +102,3 @@ class TestImageNestingByRole:
         data = VariantSerializer(variant).data
 
         assert [img['object_key'] for img in data['images']] == ['mine.png']
-
-    def test_axis_value_serializer_exposes_only_its_own_images(self, product):
-        axis = ProductAxis.objects.create(product=product, name='Color')
-        red = AxisValue.objects.create(axis=axis, name='Red', code='red')
-        blue = AxisValue.objects.create(axis=axis, name='Blue', code='blue')
-        ProductImage.objects.create(product=product, image_key='red.png', axis_value=red)
-        ProductImage.objects.create(product=product, image_key='blue.png', axis_value=blue)
-
-        from catalog.serializers import ProductAxisValueSerializer
-        data = ProductAxisValueSerializer(red).data
-
-        assert [img['object_key'] for img in data['images']] == ['red.png']
