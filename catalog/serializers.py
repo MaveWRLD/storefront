@@ -11,8 +11,8 @@ from media_storage.services.upload import (
 )
 from media_storage.services.image_url_builder import DEFAULT_SRC_WIDTH, build_srcset, build_url
 from .models import (
-    AxisValue, Product, ProductAxis, ProductImage, Collection, Review, Variant,
-    VariantAxisValue,
+    AxisValue, Product, ProductAxis, ProductImage, ProductStatus, Collection,
+    Review, Variant, VariantAxisValue,
 )
 
 
@@ -325,6 +325,25 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_images(self, product):
         gallery = [img for img in product.images.all() if img.role == 'PRODUCT_GALLERY']
         return ProductImageSerializer(gallery, many=True).data
+
+    def validate(self, attrs):
+        if attrs.get('status') == ProductStatus.PUBLISHED:
+            instance = self.instance
+            own_images = (
+                ProductImage.objects.filter(product=instance, variant__isnull=True).count()
+                if instance else 0)
+            if own_images == 0:
+                raise serializers.ValidationError(
+                    {'status': 'Product needs at least one image before it can be published.'})
+            if instance:
+                missing = [
+                    v.sku for v in instance.variants.all()
+                    if not ProductImage.objects.filter(variant=v).exists()]
+                if missing:
+                    raise serializers.ValidationError(
+                        {'status': 'These variants need at least one image before '
+                                   f'publishing: {", ".join(missing)}.'})
+        return attrs
 
     def create(self, validated_data):
         axes_data = validated_data.pop('axes', [])
