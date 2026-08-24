@@ -12,13 +12,6 @@ from catalog.models import Product, ProductAxis
 User = get_user_model()
 
 
-@pytest.fixture
-def admin_client():
-    client = APIClient()
-    client.force_authenticate(user=User(is_staff=True))
-    return client
-
-
 def make_image(name='test.png'):
     buf = BytesIO()
     PILImage.new('RGB', (10, 10)).save(buf, format='PNG')
@@ -31,11 +24,13 @@ def create_product_request(**overrides):
     data = {
         'name': 'New Shirt',
         'price': {'amount': 25.00, 'currency': 'GHS'},
+        # Values reference registry entries by name; code/label come from
+        # the vocabulary, so the payload never carries display copy.
         'axes': [
-            {'name': 'Size', 'sortOrder': 0, 'allowedValues': [
-                {'name': 'Small', 'code': 'S'}, {'name': 'Large', 'code': 'L'}]},
-            {'name': 'Color', 'sortOrder': 1, 'allowedValues': [
-                {'name': 'Red', 'code': 'R'}]},
+            {'name': 'Size', 'sortOrder': 0, 'vocabulary': 'size_letter',
+             'allowedValues': [{'name': 'S'}, {'name': 'L'}]},
+            {'name': 'Colour', 'sortOrder': 1, 'vocabulary': 'colour',
+             'allowedValues': [{'name': 'Olive'}]},
         ],
     }
     data.update(overrides)
@@ -72,14 +67,18 @@ class TestCreateProduct:
         # no variants at creation time (added via the sub-resource below)
         assert response.data['total_stock'] == 0
         assert len(response.data['images']) == 1
-        assert {axis['name'] for axis in response.data['axes']} == {'Size', 'Color'}
+        assert {axis['name'] for axis in response.data['axes']} == {'Size', 'Colour'}
+        assert {axis['vocabulary'] for axis in response.data['axes']} == {
+            'size_letter', 'colour'}
 
         product = Product.objects.get(pk=response.data['id'])
         assert product.price.amount == 25
         assert str(product.price.currency) == 'GHS'
         assert product.collection is None
         size = product.axes.get(name='Size')
-        assert set(size.values.values_list('name', flat=True)) == {'Small', 'Large'}
+        assert set(size.values.values_list('name', flat=True)) == {'S', 'L'}
+        # Every value carries a label resolved from the registry.
+        assert set(size.values.values_list('label', flat=True)) == {'S', 'L'}
 
     def test_rejects_duplicate_product_name(self, admin_client):
         assert post_product(admin_client).status_code == status.HTTP_201_CREATED
@@ -119,8 +118,8 @@ class TestCreateProduct:
     def test_admin_adds_variant_via_sub_resource_after_product_created(self, admin_client):
         create_response = post_product(admin_client)
         product_id = create_response.data['id']
-        size_value = ProductAxis.objects.get(product_id=product_id, name='Size').values.get(name='Small')
-        color_value = ProductAxis.objects.get(product_id=product_id, name='Color').values.get(name='Red')
+        size_value = ProductAxis.objects.get(product_id=product_id, name='Size').values.get(name='S')
+        color_value = ProductAxis.objects.get(product_id=product_id, name='Colour').values.get(name='Olive')
 
         response = admin_client.post(
             f'/store-admin/products/{product_id}/variants/',

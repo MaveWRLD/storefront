@@ -1,17 +1,6 @@
 import pytest
 
-from catalog.models import AxisValue, Collection, Product, ProductAxis, Variant
-
-
-@pytest.fixture
-def collection():
-    return Collection.objects.create(title='Shirts')
-
-
-@pytest.fixture
-def product(collection):
-    return Product.objects.create(
-        title='Test Shirt', slug='test-shirt', collection=collection)
+from catalog.models import Variant
 
 
 @pytest.mark.django_db
@@ -82,11 +71,12 @@ class TestCatalogVariantsAndAxes:
 
         assert product.in_stock is False
 
-    def test_product_can_have_axes_with_values(self, product):
-        size_axis = ProductAxis.objects.create(
-            product=product, name='Size', sort_order=0)
-        AxisValue.objects.create(axis=size_axis, name='Small', code='S')
-        AxisValue.objects.create(axis=size_axis, name='Large', code='L')
+    def test_product_can_have_axes_with_values(
+            self, product, size_axis, make_axis_value):
+        make_axis_value(size_axis, 'S')
+        make_axis_value(size_axis, 'L')
 
         assert product.axes.count() == 1
-        assert list(size_axis.values.values_list('name', flat=True)) == ['Small', 'Large']
+        assert list(size_axis.values.values_list('name', flat=True)) == ['S', 'L']
+        # Display copy comes from the registry, never from the product.
+        assert list(size_axis.values.values_list('label', flat=True)) == ['S', 'L']

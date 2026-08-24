@@ -12,7 +12,7 @@ from media_storage.services.upload import (
 from media_storage.services.image_url_builder import DEFAULT_SRC_WIDTH, build_srcset, build_url
 from .models import (
     AxisValue, Product, ProductAxis, ProductImage, ProductStatus, Collection,
-    Review, Variant, VariantAxisValue,
+    Review, Variant, VariantAxisValue, Vocabulary, VocabularyValue,
 )
 
 
@@ -114,16 +114,27 @@ class SimpleProductSerializer(serializers.ModelSerializer):
 
 class VariantAxisValueSerializer(serializers.ModelSerializer):
     """Read shape for a variant's selected axis values — e.g.
-    {'axis': 'Size', 'value': 'Medium', 'code': 'M'} — so a client can build
-    a 'Size: Medium / Color: Red' selector without a second round-trip to
-    /products/{slug}/ to cross-reference axis names."""
+    {'axis': 'Size', 'value': '30', 'code': 'W30', 'label': 'W30'} — so a
+    client can build a 'Size: W30 / Colour: Olive' selector without a second
+    round-trip to /products/{slug}/ to cross-reference axis names.
+
+    `label` is the only field a UI may render. `value` and `code` mean
+    different things per vocabulary ('30' is a bare number, 'OLV' is an SKU
+    token), so interpolating either into user-facing copy is a bug — that's
+    what `label` exists to prevent.
+
+    Sourced from the denormalized AxisValue.label, NOT through
+    vocabulary_value: the join would add a query per variant on every list
+    page. See test_axis_value_labels.py's query-count test.
+    """
     axis = serializers.CharField(source='axis_value.axis.name', read_only=True)
     value = serializers.CharField(source='axis_value.name', read_only=True)
     code = serializers.CharField(source='axis_value.code', read_only=True)
+    label = serializers.CharField(source='axis_value.label', read_only=True)
 
     class Meta:
         model = VariantAxisValue
-        fields = ['axis', 'value', 'code']
+        fields = ['axis', 'value', 'code', 'label']
 
 
 class VariantSerializer(serializers.ModelSerializer):
@@ -142,8 +153,9 @@ class VariantSerializer(serializers.ModelSerializer):
     # product. Named distinctly from the read-only `axis_values` above so
     # input/output don't collide on shape (ids in, expanded objects out).
     axis_value_ids = serializers.PrimaryKeyRelatedField(
-        queryset=AxisValue.objects.all(), many=True, required=False,
-        write_only=True,
+        queryset=AxisValue.objects.select_related(
+            'axis__vocabulary', 'vocabulary_value'),
+        many=True, required=False, write_only=True,
         help_text="One AxisValue id per axis defined on this variant's product.")
 
     class Meta:
@@ -177,6 +189,14 @@ class VariantSerializer(serializers.ModelSerializer):
             if axis_value.axis.product_id != int(product_id):
                 raise serializers.ValidationError(
                     {'axis_value_ids': f"'{axis_value.name}' does not belong to this product."})
+            # Can only fire on corrupted data, but it is the assertion that
+            # keeps the denormalized name/code/label honest — a value whose
+            # registry entry drifted away from its axis's vocabulary would
+            # otherwise serve display copy from the wrong taxonomy.
+            if axis_value.vocabulary_value.vocabulary_id != axis_value.axis.vocabulary_id:
+                raise serializers.ValidationError(
+                    {'axis_value_ids':
+                        f"'{axis_value.name}' does not belong to its axis's vocabulary."})
 
         axis_ids = [axis_value.axis_id for axis_value in axis_values]
         if len(axis_ids) != len(set(axis_ids)):
@@ -243,19 +263,173 @@ class SimpleVariantSerializer(serializers.ModelSerializer):
 
 
 class ProductAxisValueSerializer(serializers.ModelSerializer):
+    """The axis picker's options on product detail. Carries `label` for the
+    same reason VariantAxisValueSerializer does — this surface renders
+    before any variant is selected, so without it the storefront still needs
+    a conditional render path."""
     class Meta:
         model = AxisValue
-        fields = ['id', 'name', 'code']
+        fields = ['id', 'name', 'code', 'label']
 
 
 class ProductAxisSerializer(serializers.ModelSerializer):
     """Domains — Catalog class diagram: Product 1-->0..* ProductAxis
-    1-->0..* AxisValue (e.g. a 'Size' axis with 'Small'/'Medium' values)."""
+    1-->0..* AxisValue (e.g. a 'Size' axis with 'S'/'M' values)."""
     values = ProductAxisValueSerializer(many=True, required=False)
+    # The key string, not the id — keeps the response self-describing and
+    # lets an admin UI pre-select the right registry when editing.
+    vocabulary = serializers.SlugRelatedField(slug_field='key', read_only=True)
 
     class Meta:
         model = ProductAxis
-        fields = ['id', 'name', 'sort_order', 'values']
+        fields = ['id', 'name', 'sort_order', 'vocabulary', 'values']
+
+
+class VocabularyValueSerializer(serializers.ModelSerializer):
+    """A single resolvable entry in a vocabulary — what the admin axis-value
+    selector reads, and the only sanctioned source of an AxisValue's
+    name/code/label."""
+
+    class Meta:
+        model = VocabularyValue
+        fields = ['id', 'value', 'code', 'label', 'sort_order', 'is_active']
+
+    def validate_value(self, value):
+        # `value` is this row's identity in the URL
+        # (/vocabularies/{key}/values/{value}/), so a path separator would
+        # make the row unroutable. Rejecting at the write boundary keeps the
+        # detail route total for every row that can ever exist.
+        illegal = [c for c in '/?#' if c in value]
+        if illegal:
+            raise serializers.ValidationError(
+                "Value may not contain '/', '?' or '#' — it is used as a URL "
+                "path segment.")
+        return value
+
+    def validate(self, attrs):
+        vocabulary = self.context.get('vocabulary')
+        if vocabulary is None:
+            return attrs
+
+        # `vocabulary` comes from the URL, not the payload, so DRF cannot
+        # auto-generate the UniqueTogetherValidator for it.
+        value = attrs.get('value')
+        if value is not None:
+            clash = VocabularyValue.objects.filter(
+                vocabulary=vocabulary, value=value)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {'value': f"'{value}' is already a value of vocabulary "
+                              f"'{vocabulary.key}'."})
+
+        code = attrs.get('code')
+        if code:
+            clash = VocabularyValue.objects.filter(
+                vocabulary=vocabulary, code=code)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            owner = clash.first()
+            if owner is not None:
+                raise serializers.ValidationError(
+                    {'code': f"Code '{code}' is already used by "
+                             f"'{owner.value}' in vocabulary "
+                             f"'{vocabulary.key}'."})
+        return attrs
+
+
+class VocabularyValueUpdateSerializer(VocabularyValueSerializer):
+    """PATCH shape. `value` is immutable: it is the row's URL identity and
+    the source of every denormalized AxisValue.name, so editing it would
+    strand the URL and drift the copies. Only code/label/sort_order/is_active
+    are editable — which is exactly the 'edit an entry's code or label'
+    operation."""
+
+    class Meta(VocabularyValueSerializer.Meta):
+        read_only_fields = ['value']
+
+
+class VocabularyValueCreateSerializer(VocabularyValueSerializer):
+    """Create shape, with the escape hatch for adding a value to a
+    vocabulary that existing products must immediately be able to use.
+
+    Without `axis_ids` there is no way to get a new value onto an
+    already-created product: ProductSerializer discards `axes`, and
+    VariantSerializer only accepts ids of AxisValue rows that already exist.
+    """
+    axis_ids = serializers.PrimaryKeyRelatedField(
+        queryset=ProductAxis.objects.select_related('vocabulary'),
+        many=True, required=False, write_only=True,
+        help_text='Optional: also create an AxisValue for this new value on '
+                  'each listed axis, in the same transaction.')
+
+    class Meta(VocabularyValueSerializer.Meta):
+        fields = VocabularyValueSerializer.Meta.fields + ['axis_ids']
+
+    def validate_axis_ids(self, axes):
+        vocabulary = self.context['vocabulary']
+        mismatched = [
+            f"Axis {axis.id} draws from "
+            f"'{axis.vocabulary.key if axis.vocabulary else None}', not "
+            f"'{vocabulary.key}'."
+            for axis in axes if axis.vocabulary_id != vocabulary.id
+        ]
+        if mismatched:
+            raise serializers.ValidationError(mismatched)
+        return axes
+
+    def create(self, validated_data):
+        axes = validated_data.pop('axis_ids', [])
+        with transaction.atomic():
+            vocabulary_value = VocabularyValue.objects.create(**validated_data)
+            AxisValue.objects.bulk_create([
+                AxisValue(axis=axis, vocabulary_value=vocabulary_value,
+                          name=vocabulary_value.value,
+                          code=vocabulary_value.code,
+                          label=vocabulary_value.label)
+                for axis in axes
+            ])
+        return vocabulary_value
+
+
+class VocabularySerializer(serializers.ModelSerializer):
+    values = VocabularyValueSerializer(many=True, required=False)
+
+    class Meta:
+        model = Vocabulary
+        fields = ['id', 'key', 'label', 'description', 'values']
+
+    def validate_values(self, values):
+        errors = [{} for _ in values]
+        seen_values, seen_codes = {}, {}
+        for i, entry in enumerate(values):
+            value = entry.get('value')
+            if value in seen_values:
+                errors[i]['value'] = f"'{value}' is repeated in this payload."
+            else:
+                seen_values[value] = i
+
+            code = entry.get('code')
+            if code:
+                if code in seen_codes:
+                    errors[i]['code'] = (
+                        f"Code '{code}' is repeated in this payload.")
+                else:
+                    seen_codes[code] = i
+        if any(errors):
+            raise serializers.ValidationError(errors)
+        return values
+
+    def create(self, validated_data):
+        values = validated_data.pop('values', [])
+        with transaction.atomic():
+            vocabulary = Vocabulary.objects.create(**validated_data)
+            VocabularyValue.objects.bulk_create([
+                VocabularyValue(vocabulary=vocabulary, **entry)
+                for entry in values
+            ])
+        return vocabulary
 
 
 class ProductImageListSerializer(serializers.ModelSerializer):
@@ -317,7 +491,13 @@ class ProductSerializer(serializers.ModelSerializer):
     # products/{id}/variants/ sub-resource only (product+axes must exist
     # first), never through this payload.
     variants = VariantSerializer(many=True, read_only=True)
-    axes = ProductAxisSerializer(many=True, required=False)
+    # Read-only for the same reason `variants` above is: axes must exist
+    # before variants can reference them, and axis values may only be
+    # authored against the vocabulary registry. Product creation
+    # (CreateProductSerializer) is the single authoring path — a second,
+    # registry-unaware one here would be a documented bypass around every
+    # validation rule the registry exists to enforce.
+    axes = ProductAxisSerializer(many=True, read_only=True)
     # Auto-generated from title (like admin's prepopulated_fields) — never
     # accepted from the client.
     slug = serializers.SlugField(read_only=True)
@@ -346,22 +526,13 @@ class ProductSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        axes_data = validated_data.pop('axes', [])
         validated_data['slug'] = unique_slug_from(validated_data['title'])
-        product = Product.objects.create(**validated_data)
-        for axis_data in axes_data:
-            values_data = axis_data.pop('values', [])
-            axis = ProductAxis.objects.create(product=product, **axis_data)
-            for value_data in values_data:
-                AxisValue.objects.create(axis=axis, **value_data)
-        return product
+        return Product.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
-        # Axes aren't re-written on a plain product update (US-21 is a
-        # Catalog-field edit, not an axis-management story) — pop and
-        # leave the existing rows alone. Variants are read_only here, so
-        # they're never even in validated_data.
-        validated_data.pop('axes', None)
+        # Axes and variants are both read_only here, so neither reaches
+        # validated_data — a plain product update (US-21) is a Catalog-field
+        # edit, not an axis-management story.
         new_title = validated_data.get('title')
         if new_title and new_title != instance.title:
             validated_data['slug'] = unique_slug_from(new_title, instance=instance)
@@ -384,6 +555,108 @@ class CreateProductSerializer(serializers.Serializer):
     images = serializers.ListField(
         child=serializers.ImageField(), allow_empty=False, write_only=True,
         error_messages={'empty': 'At least one image is required.'})
+
+    def _validate_axis_vocabulary(self, axis, i, axes, seen_vocabularies, errors):
+        """Resolve `axes[i].vocabulary` to a Vocabulary, or record an error.
+
+        Declaring the vocabulary on the axis rather than per value is what
+        makes "no mixed vocabulary within a product" structural: every value
+        under an axis draws from one registry by construction. The residual
+        reachable failure is a product carrying two axes backed by two size
+        vocabularies, which is what `seen_vocabularies` catches here (and
+        the unique_product_axis_vocabulary constraint catches in the DB).
+        """
+        key = (axis.get('vocabulary') or '').strip()
+        if not key:
+            errors[f'axes[{i}].vocabulary'] = 'This field may not be blank.'
+            return None
+
+        vocabulary = Vocabulary.objects.filter(key=key).first()
+        if vocabulary is None:
+            errors[f'axes[{i}].vocabulary'] = f"No vocabulary with key '{key}'."
+            return None
+
+        if key in seen_vocabularies:
+            first = axes[seen_vocabularies[key]].get('name', '?')
+            errors[f'axes[{i}].vocabulary'] = (
+                f"Vocabulary '{key}' is already used by axis '{first}' on "
+                f"this product. An axis may not repeat a vocabulary.")
+            return None
+
+        seen_vocabularies[key] = i
+        axis['_vocabulary_id'] = vocabulary.id
+        return vocabulary
+
+    def _validate_allowed_values(self, values, i, vocabulary, errors):
+        """Resolve each allowed value against the registry.
+
+        Freehand labels are rejected outright: a value either already exists
+        in the vocabulary (in which case its code/label come from there, and
+        contradicting them is an error, not an override) or it is explicitly
+        being added to the vocabulary via `newValue`. There is no third path
+        that writes an AxisValue with client-supplied display copy.
+        """
+        existing = {
+            vv.value: vv for vv in vocabulary.values.filter(is_active=True)}
+        taken_codes = {vv.code: vv.value for vv in existing.values() if vv.code}
+        new_codes = {}
+
+        for j, value in enumerate(values):
+            field = f'axes[{i}].allowedValues[{j}]'
+            name = (value.get('name') or '').strip()
+            if not name:
+                errors[f'{field}.name'] = 'This field may not be blank.'
+                continue
+
+            vv = existing.get(name)
+            if vv is not None:
+                self._reject_registry_overrides(value, vv, field, vocabulary, errors)
+                value['_vocabulary_value_id'] = vv.id
+                continue
+
+            if not value.get('newValue'):
+                errors[f'{field}.name'] = (
+                    f"'{name}' is not a value of vocabulary "
+                    f"'{vocabulary.key}'. To add it, set \"newValue\": true "
+                    f"and supply a \"label\".")
+                continue
+
+            label = (value.get('label') or '').strip()
+            if not label:
+                errors[f'{field}.label'] = (
+                    'This field is required when newValue is true.')
+                continue
+
+            code = (value.get('code') or '').strip()
+            if code and (code in taken_codes or code in new_codes):
+                owner = taken_codes.get(code) or new_codes.get(code)
+                errors[f'{field}.code'] = (
+                    f"Code '{code}' is already used by '{owner}' in "
+                    f"vocabulary '{vocabulary.key}'.")
+                continue
+            if code:
+                new_codes[code] = name
+
+            value['_new'] = {'value': name, 'code': code, 'label': label,
+                             'sort_order': value.get('sortOrder', 0)}
+
+    def _reject_registry_overrides(self, value, vv, field, vocabulary, errors):
+        """A payload may echo a registry entry's code/label, but may not
+        contradict it — relabelling is global and goes through PATCH."""
+        label = (value.get('label') or '').strip()
+        if label and label != vv.label:
+            errors[f'{field}.label'] = (
+                f"'{vv.value}' is already labelled '{vv.label}' in "
+                f"vocabulary '{vocabulary.key}'. Relabelling is global — use "
+                f"PATCH /store-admin/vocabularies/{vocabulary.key}/values/"
+                f"{vv.value}/.")
+        code = (value.get('code') or '').strip()
+        if code and code != vv.code:
+            errors[f'{field}.code'] = (
+                f"'{vv.value}' already has code '{vv.code}' in vocabulary "
+                f"'{vocabulary.key}'. Changing it is global — use PATCH "
+                f"/store-admin/vocabularies/{vocabulary.key}/values/"
+                f"{vv.value}/.")
 
     def validate_data(self, raw):
         try:
@@ -418,18 +691,22 @@ class CreateProductSerializer(serializers.Serializer):
         if not axes:
             errors['axes'] = 'At least one axis is required.'
         else:
+            seen_vocabularies = {}
             for i, axis in enumerate(axes):
                 if not (axis.get('name') or '').strip():
                     errors[f'axes[{i}].name'] = 'This field may not be blank.'
                 if axis.get('sortOrder', 0) < 0:
                     errors[f'axes[{i}].sortOrder'] = 'Must be >= 0.'
+
+                vocabulary = self._validate_axis_vocabulary(
+                    axis, i, axes, seen_vocabularies, errors)
+
                 values = axis.get('allowedValues') or []
                 if not values:
                     errors[f'axes[{i}].allowedValues'] = 'At least one allowed value is required.'
-                else:
-                    for j, value in enumerate(values):
-                        if not (value.get('name') or '').strip():
-                            errors[f'axes[{i}].allowedValues[{j}].name'] = 'This field may not be blank.'
+                elif vocabulary is not None:
+                    self._validate_allowed_values(
+                        values, i, vocabulary, errors)
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -449,6 +726,24 @@ class CreateProductSerializer(serializers.Serializer):
                 raise serializers.ValidationError(str(e))
         return images
 
+    def _resolve_vocabulary_value(self, value, vocabulary_id):
+        """Return the VocabularyValue this allowed value refers to, creating
+        it first if the payload is adding it to the vocabulary.
+
+        The registry write happens inside create()'s existing
+        transaction.atomic(), which is what makes "add a new value and use
+        it in one atomic step" true for free: if anything later in create()
+        raises — an image upload, say — the new vocabulary entry rolls back
+        with the product rather than orphaning itself in the registry.
+        """
+        spec = value.get('_new')
+        if spec is None:
+            return VocabularyValue.objects.get(pk=value['_vocabulary_value_id'])
+        return VocabularyValue.objects.create(
+            vocabulary_id=vocabulary_id, value=spec['value'],
+            code=spec['code'], label=spec['label'],
+            sort_order=spec['sort_order'])
+
     def create(self, validated_data):
         with transaction.atomic():
             data = validated_data['data']
@@ -462,11 +757,17 @@ class CreateProductSerializer(serializers.Serializer):
             for axis in data['axes']:
                 axis_obj = ProductAxis.objects.create(
                     product=product, name=axis['name'].strip(),
-                    sort_order=axis.get('sortOrder', 0))
+                    sort_order=axis.get('sortOrder', 0),
+                    vocabulary_id=axis['_vocabulary_id'])
                 for value in axis['allowedValues']:
+                    vv = self._resolve_vocabulary_value(
+                        value, axis['_vocabulary_id'])
+                    # name/code/label are copied FROM the registry, never
+                    # from the request — even a well-formed payload cannot
+                    # inject display copy that diverges from the vocabulary.
                     AxisValue.objects.create(
-                        axis=axis_obj, name=value['name'].strip(),
-                        code=value.get('code', ''))
+                        axis=axis_obj, vocabulary_value=vv,
+                        name=vv.value, code=vv.code, label=vv.label)
 
             # bulk_create can't run per-row I/O — upload each file first
             # (sequentially; there's no async story here), then insert the

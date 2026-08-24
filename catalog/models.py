@@ -144,32 +144,139 @@ class Variant(models.Model):
         ]
 
 
+class Vocabulary(models.Model):
+    """Global, backend-owned taxonomy an axis draws its values from — e.g.
+    'size_letter', 'size_waist_in', 'colour'. Unlike ProductAxis/AxisValue
+    (which are per-product, so 'Size' exists once per product), there is
+    exactly one row per taxonomy for the whole catalog. Structural
+    precedent: Collection.
+
+    This is what stops display copy being freehand-typed per product: an
+    AxisValue may only ever copy its name/code/label from a registry entry.
+    """
+    key = models.SlugField(max_length=64, unique=True)
+    # Human name for the admin selector, e.g. 'Letter size'.
+    label = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default='')
+
+    def __str__(self) -> str:
+        return self.key
+
+    class Meta:
+        ordering = ['key']
+        verbose_name_plural = 'vocabularies'
+
+
+class VocabularyValue(models.Model):
+    """One resolvable value in a Vocabulary.
+
+    The three text columns do three different jobs and are NOT derivable
+    from each other — which is the whole reason `label` has to exist:
+
+        vocabulary     value    code    label
+        size_waist_in  '30'     'W30'   'W30'   <- label == code, != value
+        size_letter    'S'      'S'     'S'     <- all three coincide
+        colour         'Olive'  'OLV'   'Olive' <- label == value, != code
+
+    `value` is the matching/filter key, `code` is the SKU token, `label` is
+    the only field a UI may render. No derivation rule produces all three
+    rows above, so `label` is authored per entry.
+    """
+    vocabulary = models.ForeignKey(
+        Vocabulary, on_delete=models.CASCADE, related_name='values')
+    value = models.CharField(max_length=100)
+    code = models.CharField(max_length=50, blank=True, default='')
+    label = models.CharField(max_length=100)
+    sort_order = models.PositiveIntegerField(default=0)
+    # Soft-retire a discontinued value without breaking the historical
+    # AxisValue rows that still point at it (those FKs are PROTECTed).
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self) -> str:
+        return f'{self.vocabulary.key}: {self.label}'
+
+    class Meta:
+        ordering = ['vocabulary__key', 'sort_order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['vocabulary', 'value'],
+                name='unique_vocabulary_value'),
+            # Partial: a blank code stays legal (matches AxisValue.code's
+            # existing default) but real SKU tokens can't collide.
+            models.UniqueConstraint(
+                fields=['vocabulary', 'code'],
+                name='unique_vocabulary_code',
+                condition=~models.Q(code='')),
+            models.CheckConstraint(
+                condition=~models.Q(label=''),
+                name='vocabulary_value_label_not_blank'),
+        ]
+
+
 class ProductAxis(models.Model):
     """Domains — Catalog class diagram: e.g. 'Size' or 'Color'."""
     product = models.ForeignKey(
         Product, on_delete=models.CASCADE, related_name='axes')
     name = models.CharField(max_length=100)
     sort_order = models.PositiveIntegerField(default=0)
+    # Which registry taxonomy this axis draws from. PROTECT because a
+    # vocabulary in use by live product data must not be deletable — which
+    # is also what makes VocabularyValue.vocabulary safe to CASCADE.
+    # Migrations 0004/0006 add this nullable and backfill it; 0007 makes it
+    # required. Every axis draws from the registry.
+    vocabulary = models.ForeignKey(
+        Vocabulary, on_delete=models.PROTECT, related_name='axes')
 
     def __str__(self) -> str:
         return self.name
 
     class Meta:
         ordering = ['sort_order', 'id']
+        constraints = [
+            # A product may not draw two axes from the same vocabulary (a
+            # 'Size' axis on size_letter plus a 'Waist' axis on
+            # size_waist_in). Postgres treats NULLs as distinct, so this is
+            # inert until 0008 makes the column NOT NULL.
+            models.UniqueConstraint(
+                fields=['product', 'vocabulary'],
+                name='unique_product_axis_vocabulary'),
+        ]
 
 
 class AxisValue(models.Model):
-    """Domains — Catalog class diagram: e.g. 'Small'/'S' under the 'Size' axis."""
+    """Domains — Catalog class diagram: e.g. 'Small'/'S' under the 'Size' axis.
+
+    name/code/label are denormalized copies of the referenced
+    VocabularyValue's value/code/label. They are written ONLY from the
+    registry, never from client input, so the storefront read path can
+    serve `label` without joining through to Vocabulary on every variant.
+    VocabularyValueAdminViewSet.perform_update is the one place that fans a
+    registry edit back out to these copies.
+    """
     axis = models.ForeignKey(
         ProductAxis, on_delete=models.CASCADE, related_name='values')
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=50, blank=True, default='')
+    # The only field a UI may render. Added non-null with a blank default
+    # (metadata-only ADD COLUMN on Postgres); the blank-rejecting check
+    # constraint arrives in 0007, after the backfill has populated it.
+    label = models.CharField(max_length=100, default='')
+    vocabulary_value = models.ForeignKey(
+        VocabularyValue, on_delete=models.PROTECT, related_name='axis_values')
 
     def __str__(self) -> str:
         return self.name
 
     class Meta:
         ordering = ['id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['axis', 'vocabulary_value'],
+                name='unique_axis_vocabulary_value'),
+            models.CheckConstraint(
+                condition=~models.Q(label=''),
+                name='axis_value_label_not_blank'),
+        ]
 
 
 class VariantAxisValue(models.Model):

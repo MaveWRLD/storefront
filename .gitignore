@@ -192,3 +192,6 @@ scratch_test_dawurobo_key.sh
 
 # collectstatic output (prod build artifact, regenerated on every deploy)
 staticfiles/
+
+# Playwright MCP debug artifacts
+.playwright-mcp/

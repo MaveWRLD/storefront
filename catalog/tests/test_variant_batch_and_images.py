@@ -1,49 +1,11 @@
 from io import BytesIO
 
-from django.contrib.auth import get_user_model
 from PIL import Image as PILImage
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from catalog.models import (
-    AxisValue, Collection, Product, ProductAxis, ProductImage, Variant,
-)
-
-User = get_user_model()
-
-
-@pytest.fixture
-def admin_client():
-    client = APIClient()
-    client.force_authenticate(user=User(is_staff=True))
-    return client
-
-
-@pytest.fixture
-def collection():
-    return Collection.objects.create(title='Shirts')
-
-
-@pytest.fixture
-def product(collection):
-    return Product.objects.create(
-        title='Test Shirt', slug='test-shirt', collection=collection)
-
-
-@pytest.fixture
-def size_axis(product):
-    return ProductAxis.objects.create(product=product, name='Size', sort_order=0)
-
-
-@pytest.fixture
-def small(size_axis):
-    return AxisValue.objects.create(axis=size_axis, name='Small', code='S')
-
-
-@pytest.fixture
-def large(size_axis):
-    return AxisValue.objects.create(axis=size_axis, name='Large', code='L')
+from catalog.models import Product, ProductImage, Variant, VariantAxisValue
 
 
 def make_image(name='test.png'):
@@ -119,7 +81,6 @@ class TestVariantBatchCreate:
 
     def test_duplicate_combination_against_existing_variant_rejects_whole_batch(
             self, admin_client, product, small, large):
-        from catalog.models import VariantAxisValue
         existing = Variant.objects.create(product=product, sku='existing', unit_price=1000)
         VariantAxisValue.objects.create(variant=existing, axis_value=small)
 
