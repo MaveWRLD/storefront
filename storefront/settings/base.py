@@ -219,6 +219,7 @@ LOGGING = {
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
 REST_FRAMEWORK = {
     'COERCE_DECIMAL_TO_STRING': False,
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -310,3 +311,11 @@ DAWUROBO_PICKUP_LNG = os.environ.get('DAWUROBO_PICKUP_LNG') or None
 # create_shipment call that isn't purely a sandbox smoke test.
 DAWUROBO_PICKUP_CONTACT_NAME = os.environ.get('DAWUROBO_PICKUP_CONTACT_NAME', 'Warehouse')
 DAWUROBO_PICKUP_CONTACT_PHONE = os.environ.get('DAWUROBO_PICKUP_CONTACT_PHONE', '+233000000000')
+
+
+# Error reporting. Deliberately last: sentry_sdk.init() patches Django,
+# so it needs the LOGGING dict above already defined, and it must run
+# before Django starts importing app code. No-op without SENTRY_DSN.
+from storefront.sentry import init_sentry  # noqa: E402
+
+init_sentry()

@@ -20,6 +20,10 @@ django-cors-headers = "*"
 python-magic = "*"
 gunicorn = "*"
 whitenoise = "*"
+# Errors only; OTel owns traces/metrics. Capped below 3.0 on purpose:
+# sentry-sdk 3.x ("POTel") is built on OpenTelemetry and installs its own
+# TracerProvider, which would fight opentelemetry-instrument in start.sh.
+sentry-sdk = {version = ">=2,<3", extras = ["django"]}
 weasyprint = "*"
 opentelemetry-distro = "*"
 opentelemetry-exporter-otlp-proto-http = "*"
