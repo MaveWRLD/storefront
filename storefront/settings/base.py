@@ -30,35 +30,9 @@ ALLOWED_HOSTS = [
 # (DEBUG's implicit localhost/127.0.0.1 allowance doesn't cover it) — e.g.
 # ALLOWED_HOSTS=abcd1234.ngrok-free.app
 
-# Sentry — no-op locally when SENTRY_DSN isn't set, so dev/CI never need it.
-SENTRY_DSN = os.environ.get('SENTRY_DSN')
-if SENTRY_DSN:
-    import sentry_sdk
-    from sentry_sdk.integrations.django import DjangoIntegration
-
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        integrations=[DjangoIntegration()],
-        # DJANGO_SETTINGS_MODULE's last segment (dev/staging/prod) doubles
-        # as the Sentry environment tag unless SENTRY_ENVIRONMENT overrides it.
-        environment=os.environ.get(
-            'SENTRY_ENVIRONMENT',
-            os.environ.get('DJANGO_SETTINGS_MODULE', '').rsplit('.', 1)[-1] or 'unknown',
-        ),
-        # Tracing lives in Grafana Cloud via OTLP now (see Procfile's
-        # opentelemetry-instrument + OTEL_TRACES_SAMPLER*) — Sentry here is
-        # error capture only, so traces_sample_rate stays 0 to avoid a
-        # second, separately-tuned trace pipeline. Errors are always
-        # captured regardless of this rate.
-        traces_sample_rate=float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0')),
-        send_default_pii=False,
-    )
-
-
 # Application definition
 
 INSTALLED_APPS = [
-    'django_prometheus',
     'django.contrib.admin',
     'django.contrib.sessions',
     'django.contrib.auth',
@@ -87,10 +61,6 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    # Must be first — starts the per-request timer django-prometheus uses
-    # to record request latency (paired with PrometheusAfterMiddleware,
-    # which must be last).
-    'django_prometheus.middleware.PrometheusBeforeMiddleware',
     'django.middleware.security.SecurityMiddleware',
     # Serves collected static files directly from gunicorn — no separate
     # static host needed for admin/DRF-browsable-API/spectacular assets.
@@ -102,7 +72,6 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django_prometheus.middleware.PrometheusAfterMiddleware',
 ]
 
 # CORS: the deployed frontend origin(s) — comma-separated, e.g.
@@ -227,33 +196,21 @@ if MEDIA_STORAGE_BACKEND == 'r2':
 # no console handler is configured by default outside runserver/DEBUG.
 # Gunicorn's own stdout/stderr becomes the traceback destination here,
 # which is what Railway's log viewer actually shows.
-# Ships logs to Grafana Cloud via OTLP — same OTEL_EXPORTER_OTLP_ENDPOINT/
-# OTEL_EXPORTER_OTLP_HEADERS already used for metrics/traces (Procfile's
-# opentelemetry-instrument wrapper), no separate Loki credentials needed.
-# No-op locally when OTEL_EXPORTER_OTLP_ENDPOINT isn't set.
-_log_handlers = ['console']
-_LOGGING_HANDLERS = {
-    'console': {
-        'class': 'logging.StreamHandler',
-    },
-}
-if os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT'):
-    _LOGGING_HANDLERS['otel'] = {
-        '()': 'storefront.observability.get_otel_log_handler',
-    }
-    _log_handlers.append('otel')
-
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'handlers': _LOGGING_HANDLERS,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
     'root': {
-        'handlers': _log_handlers,
+        'handlers': ['console'],
         'level': 'INFO',
     },
     'loggers': {
         'django.request': {
-            'handlers': _log_handlers,
+            'handlers': ['console'],
             'level': 'ERROR',
             'propagate': False,
         },

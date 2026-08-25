@@ -1,5 +1,8 @@
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.mixins import (
     CreateModelMixin, DestroyModelMixin, ListModelMixin, RetrieveModelMixin,
     UpdateModelMixin,
@@ -14,6 +17,14 @@ from .serializers import (
     CreateOrderSerializer, GuestOrderLookupSerializer, OrderSerializer,
     UpdateOrderSerializer,
 )
+from .services import render_invoice_pdf
+
+
+def _invoice_response(order):
+    pdf_bytes = render_invoice_pdf(order)
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="invoice-{order.id}.pdf"'
+    return response
 
 
 @extend_schema_view(
@@ -33,7 +44,7 @@ class OrderViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, Generic
     serializer_class = OrderSerializer
 
     def get_permissions(self):
-        if self.action in ['create', 'lookup']:
+        if self.action in ['create', 'lookup', 'invoice']:
             return [AllowAny()]
         return [IsAuthenticated()]
 
@@ -66,6 +77,26 @@ class OrderViewSet(CreateModelMixin, ListModelMixin, RetrieveModelMixin, Generic
         serializer.is_valid(raise_exception=True)
         order = serializer.validated_data['order']
         return Response(OrderSerializer(order).data)
+
+    @extend_schema(
+        summary='Download invoice PDF',
+        description=(
+            'Download the order invoice as a PDF. An authenticated customer '
+            'may only download their own order\'s invoice; a guest must pass '
+            'the guest_token (returned at order creation) as ?token=.'))
+    @action(detail=True, methods=['get'], permission_classes=[AllowAny])
+    def invoice(self, request, pk=None):
+        order = get_object_or_404(Order, pk=pk)
+        user = request.user
+        if user.is_authenticated:
+            customer = Customer.objects.filter(user_id=user.id).first()
+            if order.customer_id is None or customer is None or order.customer_id != customer.id:
+                raise PermissionDenied('You do not have access to this order.')
+        else:
+            token = request.query_params.get('token')
+            if not token or token != order.guest_token:
+                raise PermissionDenied('A valid guest token is required.')
+        return _invoice_response(order)
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -110,3 +141,11 @@ class OrderAdminViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin,
     @action(detail=False, methods=['get'])
     def count(self, request):
         return Response({'count': Order.objects.count()})
+
+    @extend_schema(
+        summary='Download invoice PDF (admin)',
+        description='Download any order\'s invoice as a PDF. Staff-only.')
+    @action(detail=True, methods=['get'])
+    def invoice(self, request, pk=None):
+        order = get_object_or_404(Order, pk=pk)
+        return _invoice_response(order)

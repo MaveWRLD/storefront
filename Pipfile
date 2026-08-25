@@ -20,12 +20,7 @@ django-cors-headers = "*"
 python-magic = "*"
 gunicorn = "*"
 whitenoise = "*"
-sentry-sdk = "*"
-django-prometheus = "*"
-opentelemetry-distro = "*"
-opentelemetry-exporter-otlp = "*"
-opentelemetry-instrumentation-django = "*"
-opentelemetry-instrumentation-psycopg2 = "*"
+weasyprint = "*"
 
 [dev-packages]
 autopep8 = "*"

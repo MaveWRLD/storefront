@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+    body { font-family: sans-serif; font-size: 12px; color: #222; }
+    h1 { font-size: 20px; margin-bottom: 0; }
+    .muted { color: #666; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #ddd; }
+    th { background: #f5f5f5; }
+    .totals td { border: none; padding: 2px 4px; }
+    .totals .label { text-align: right; }
+    .totals .grand-total { font-weight: bold; font-size: 14px; }
+</style>
+</head>
+<body>
+    <h1>Invoice — Order #{{ order.id }}</h1>
+    <p class="muted">Placed {{ order.placed_at }}</p>
+
+    <p>
+        <strong>{{ name }}</strong><br>
+        {{ email }}<br>
+        {% if address %}
+            {{ address.street_address }}<br>
+            {{ address.city }}, {{ address.region }}
+        {% endif %}
+    </p>
+
+    <table>
+        <thead>
+            <tr><th>Item</th><th>Qty</th><th>Unit price</th><th>Line total</th></tr>
+        </thead>
+        <tbody>
+            {% for item in line_items %}
+            <tr>
+                <td>{{ item.title }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>{{ item.unit_price }}</td>
+                <td>{{ item.line_total }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <table class="totals">
+        <tr><td class="label">Subtotal</td><td>{{ order.subtotal }}</td></tr>
+        <tr><td class="label">Shipping</td><td>{{ order.shipping_cost }}</td></tr>
+        <tr class="grand-total"><td class="label">Total</td><td>{{ order.get_total }}</td></tr>
+    </table>
+</body>
+</html>
