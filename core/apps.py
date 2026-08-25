@@ -7,3 +7,7 @@ class CoreConfig(AppConfig):
 
     def ready(self) -> None:
         import core.signals.handlers  # noqa: F401
+
+        from storefront.otel import instrument_runtime_metrics
+
+        instrument_runtime_metrics()
