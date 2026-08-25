@@ -21,6 +21,31 @@ python-magic = "*"
 gunicorn = "*"
 whitenoise = "*"
 weasyprint = "*"
+opentelemetry-distro = "*"
+opentelemetry-exporter-otlp-proto-http = "*"
+# Rest of this block is `opentelemetry-bootstrap -a requirements` output for
+# this app's actual dependency set (django, psycopg2, boto3, gunicorn/wsgi).
+# Pinned explicitly rather than run as a build step so Pipfile.lock stays
+# the single source of truth for what deploys — re-run bootstrap and update
+# this list if a new instrumented library (redis, celery, etc.) gets added.
+opentelemetry-instrumentation-asyncio = "*"
+opentelemetry-instrumentation-dbapi = "*"
+opentelemetry-instrumentation-exceptions = "*"
+opentelemetry-instrumentation-logging = "*"
+opentelemetry-instrumentation-sqlite3 = "*"
+opentelemetry-instrumentation-threading = "*"
+opentelemetry-instrumentation-urllib = "*"
+opentelemetry-instrumentation-wsgi = "*"
+opentelemetry-instrumentation-asgi = "*"
+opentelemetry-instrumentation-boto3sqs = "*"
+opentelemetry-instrumentation-botocore = "*"
+opentelemetry-instrumentation-click = "*"
+opentelemetry-instrumentation-django = "*"
+opentelemetry-instrumentation-grpc = "*"
+opentelemetry-instrumentation-psycopg2 = "*"
+opentelemetry-instrumentation-requests = "*"
+opentelemetry-instrumentation-system-metrics = "*"
+opentelemetry-instrumentation-urllib3 = "*"
 
 [dev-packages]
 autopep8 = "*"
