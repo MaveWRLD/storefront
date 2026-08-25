@@ -1,6 +1,17 @@
 {
   "$schema": "https://schema.railpack.com",
   "deploy": {
-    "aptPackages": ["...", "libmagic1"]
+    "aptPackages": [
+      "...",
+      "libpango-1.0-0",
+      "libpangoft2-1.0-0",
+      "libpangocairo-1.0-0",
+      "libcairo2",
+      "libgdk-pixbuf2.0-0",
+      "libglib2.0-0",
+      "libjpeg62-turbo",
+      "shared-mime-info",
+      "fonts-liberation"
+    ]
   }
 }
