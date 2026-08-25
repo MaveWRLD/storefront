@@ -13,4 +13,8 @@ from django.core.wsgi import get_wsgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'storefront.settings.dev')
 
+from storefront.otel import configure_log_sampling  # noqa: E402
+
+configure_log_sampling()
+
 application = get_wsgi_application()

@@ -13,4 +13,8 @@ from django.core.asgi import get_asgi_application
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'storefront.settings.dev')
 
+from storefront.otel import configure_log_sampling  # noqa: E402
+
+configure_log_sampling()
+
 application = get_asgi_application()
