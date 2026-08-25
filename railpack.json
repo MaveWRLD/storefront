@@ -11,7 +11,8 @@
       "libglib2.0-0t64",
       "libjpeg62-turbo",
       "shared-mime-info",
-      "fonts-liberation"
+      "fonts-liberation",
+      "libmagic1"
     ]
   }
 }
